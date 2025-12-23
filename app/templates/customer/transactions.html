@@ -1,0 +1,428 @@
+{% extends "customer/layout.html" %}
+
+{% block title %}معاملاتي - بريق اليسر{% endblock %}
+
+{% block page_content %}
+<!-- Pending Transactions Alert -->
+<div id="pending-section" class="hidden mb-6">
+  <div class="card" style="background: linear-gradient(135deg, #fffbeb, white); border-color: #fde68a;">
+    <div class="flex items-center justify-between mb-4">
+      <h3 style="margin: 0; color: #92400e;">⏳ معاملات بانتظار التأكيد</h3>
+      <span id="pending-count" class="badge badge-warning">0</span>
+    </div>
+    <div id="pending-transactions"></div>
+  </div>
+</div>
+
+<!-- All Transactions -->
+<div class="card">
+  <div class="card-header">
+    <h2 style="font-size: 1.5rem; margin: 0;">جميع المعاملات</h2>
+    <!-- Filter Tabs -->
+    <div class="tabs" style="margin: 0; padding: 0; background: none; border: none; width: auto; gap: var(--space-2);">
+      <button class="tab active" data-status="">الكل</button>
+      <button class="tab" data-status="confirmed">مؤكدة</button>
+      <button class="tab" data-status="paid">مدفوعة</button>
+      <button class="tab" data-status="overdue">متأخرة</button>
+    </div>
+  </div>
+
+  <div id="transactions-content">
+    <div class="loading-container">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Transaction Details Modal -->
+<div id="transaction-modal" class="modal hidden">
+  <div class="modal-overlay" onclick="closeModal()"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 style="margin: 0;">تفاصيل المعاملة</h3>
+      <button onclick="closeModal()" class="btn btn-secondary btn-sm">✕</button>
+    </div>
+    <div id="modal-body">
+      <div class="loading-container">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+  let currentFilter = '';
+
+  async function loadTransactions(status = '') {
+    const container = document.getElementById('transactions-content');
+
+    try {
+      const params = { per_page: 50 };
+      if (status) params.status = status;
+
+      const result = await API.customer.getTransactions(params);
+      console.log('Transactions result:', result);
+
+      // Safely extract transactions
+      let transactions = [];
+      if (result.success && result.data?.data?.transactions && Array.isArray(result.data.data.transactions)) {
+        transactions = result.data.data.transactions;
+      }
+
+      // Separate pending transactions
+      const pendingTxns = transactions.filter(t => t.status === 'pending');
+      const otherTxns = transactions.filter(t => t.status !== 'pending');
+
+      // Show pending section if there are pending transactions
+      const pendingSection = document.getElementById('pending-section');
+      if (pendingTxns.length > 0 && !status) {
+        pendingSection.classList.remove('hidden');
+        document.getElementById('pending-count').textContent = pendingTxns.length;
+        renderPendingTransactions(pendingTxns);
+      } else {
+        pendingSection.classList.add('hidden');
+      }
+
+      // Render main transactions
+      const displayTxns = status ? transactions : otherTxns;
+
+      if (displayTxns.length === 0) {
+        container.innerHTML = `
+          <div class="text-center p-6 text-muted">
+            <span style="font-size: 3rem;">📭</span>
+            <p class="mt-4">لا توجد معاملات</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>رقم المرجع</th>
+                <th>المتجر</th>
+                <th>التاريخ</th>
+                <th>المبلغ</th>
+                <th>المتبقي</th>
+                <th>الحالة</th>
+                <th>الإجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${displayTxns.map(txn => `
+                <tr>
+                  <td style="direction: ltr;">${txn.reference_number || '-'}</td>
+                  <td>${txn.merchant?.name_ar || 'متجر'}</td>
+                  <td>${formatDate(txn.transaction_date)}</td>
+                  <td class="font-bold">${formatNumber(txn.total_amount)} نقطة</td>
+                  <td class="${txn.remaining_amount > 0 ? 'text-danger' : 'text-success'}">${formatNumber(txn.remaining_amount || 0)} نقطة</td>
+                  <td><span class="badge ${getStatusBadgeClass(txn.status)}">${getStatusLabel(txn.status)}</span></td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm" onclick="viewTransaction('${txn.id}')">عرض</button>
+                    ${txn.remaining_amount > 0 && txn.status !== 'pending' ? `
+                      <a href="/customer/pay?txn=${txn.id}" class="btn btn-primary btn-sm">دفع</a>
+                    ` : ''}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+      showError(container, 'حدث خطأ في تحميل المعاملات');
+    }
+  }
+
+  function renderPendingTransactions(transactions) {
+    const container = document.getElementById('pending-transactions');
+    container.innerHTML = transactions.map(txn => `
+      <div class="pending-item">
+        <div style="flex: 1;">
+          <p class="font-bold">${txn.merchant?.name_ar || 'متجر'}</p>
+          <p class="text-sm text-muted">رقم: ${txn.reference_number} • ${formatDate(txn.transaction_date)}</p>
+        </div>
+        <div style="text-align: left; direction: ltr; margin: 0 var(--space-4);">
+          <p class="font-bold text-lg">${formatNumber(txn.total_amount)} نقطة</p>
+          <p class="text-sm text-muted">${txn.items?.length || 0} منتج</p>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-primary btn-sm" onclick="confirmTransaction('${txn.id}', this)">✅ تأكيد</button>
+          <button class="btn btn-danger btn-sm" onclick="rejectTransaction('${txn.id}', this)">❌ رفض</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function confirmTransaction(id, button) {
+    if (!confirm('هل أنت متأكد من تأكيد هذه المعاملة؟ سيتم خصم المبلغ من نقاطك.')) return;
+
+    button.disabled = true;
+    button.textContent = 'جاري...';
+
+    try {
+      const result = await API.customer.confirmTransaction(id);
+      if (result.success && result.data.success) {
+        alert('✅ تم تأكيد المعاملة بنجاح');
+        loadTransactions(currentFilter);
+      } else {
+        alert('❌ ' + (result.data?.message || 'فشل تأكيد المعاملة'));
+        button.disabled = false;
+        button.textContent = '✅ تأكيد';
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء تأكيد المعاملة');
+      button.disabled = false;
+      button.textContent = '✅ تأكيد';
+    }
+  }
+
+  async function rejectTransaction(id, button) {
+    const reason = prompt('سبب رفض المعاملة:');
+    if (!reason) return;
+
+    button.disabled = true;
+    button.textContent = 'جاري...';
+
+    try {
+      const result = await API.customer.rejectTransaction(id, reason);
+      if (result.success && result.data.success) {
+        alert('✅ تم رفض المعاملة بنجاح');
+        loadTransactions(currentFilter);
+      } else {
+        alert('❌ ' + (result.data?.message || 'فشل رفض المعاملة'));
+        button.disabled = false;
+        button.textContent = '❌ رفض';
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء رفض المعاملة');
+      button.disabled = false;
+      button.textContent = '❌ رفض';
+    }
+  }
+
+  async function viewTransaction(id) {
+    const modal = document.getElementById('transaction-modal');
+    const body = document.getElementById('modal-body');
+
+    modal.classList.remove('hidden');
+    body.innerHTML = '<div class="loading-container"><div class="spinner"></div></div>';
+
+    try {
+      const token = TokenManager.getAccessToken();
+      console.log('Token:', token ? 'exists' : 'missing');
+
+      if (!token) {
+        body.innerHTML = '<div class="alert alert-error">يرجى تسجيل الدخول مرة أخرى</div>';
+        return;
+      }
+
+      console.log('Fetching transaction:', id);
+      const response = await fetch(`/api/v1/customers/me/transactions/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Response status:', response.status);
+      if (!response.ok) {
+        body.innerHTML = `<div class="alert alert-error">خطأ في تحميل المعاملة (${response.status})</div>`;
+        return;
+      }
+
+      const result = await response.json();
+      console.log('API result:', result);
+
+      // Extract transaction - API returns { success: true, data: { transaction: {...} } }
+      let txn = null;
+      if (result.success && result.data) {
+        txn = result.data.transaction;
+      }
+      console.log('Extracted txn:', txn);
+
+      if (!txn) {
+        body.innerHTML = `<div class="alert alert-error">المعاملة غير موجودة</div>`;
+        return;
+      }
+
+      console.log('Rendering modal...');
+
+      // Build items HTML
+      let itemsHtml = '';
+      if (txn.items && txn.items.length > 0) {
+        const itemsList = txn.items.map(item =>
+          `<div class="flex justify-between mb-2">
+            <span>${item.name || 'منتج'} x ${item.quantity || 1}</span>
+            <span>${formatNumber(item.unit_price || item.price || 0)} نقطة</span>
+          </div>`
+        ).join('');
+        itemsHtml = `
+          <div class="mb-4">
+            <p class="text-sm text-muted mb-2">المنتجات</p>
+            <div style="background: var(--gray-50); border-radius: var(--radius-lg); padding: var(--space-3);">
+              ${itemsList}
+            </div>
+          </div>
+        `;
+      }
+
+      // Build pay button
+      let payBtn = '';
+      if (txn.remaining_amount > 0 && txn.status !== 'pending') {
+        payBtn = `<a href="/customer/pay?txn=${txn.id}" class="btn btn-primary btn-block">دفع المتبقي</a>`;
+      }
+
+      body.innerHTML = `
+        <div class="mb-4">
+          <p class="text-sm text-muted">رقم المرجع</p>
+          <p class="font-bold" style="direction: ltr;">${txn.reference_number || '-'}</p>
+        </div>
+
+        <div class="grid grid-2 mb-4">
+          <div>
+            <p class="text-sm text-muted">المتجر</p>
+            <p class="font-bold">${txn.merchant ? txn.merchant.name_ar : '-'}</p>
+          </div>
+          <div>
+            <p class="text-sm text-muted">الفرع</p>
+            <p class="font-bold">${txn.branch ? txn.branch.name_ar : '-'}</p>
+          </div>
+        </div>
+
+        ${itemsHtml}
+
+        <div class="grid grid-3 mb-4">
+          <div>
+            <p class="text-sm text-muted">المجموع</p>
+            <p class="font-bold">${formatNumber(txn.total_amount || 0)} نقطة</p>
+          </div>
+          <div>
+            <p class="text-sm text-muted">المدفوع</p>
+            <p class="font-bold text-success">${formatNumber(txn.paid_amount || 0)} نقطة</p>
+          </div>
+          <div>
+            <p class="text-sm text-muted">المتبقي</p>
+            <p class="font-bold text-danger">${formatNumber(txn.remaining_amount || 0)} نقطة</p>
+          </div>
+        </div>
+
+        <div class="grid grid-2 mb-4">
+          <div>
+            <p class="text-sm text-muted">تاريخ المعاملة</p>
+            <p class="font-bold">${formatDate(txn.transaction_date)}</p>
+          </div>
+          <div>
+            <p class="text-sm text-muted">تاريخ الاستحقاق</p>
+            <p class="font-bold">${formatDate(txn.due_date)}</p>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <p class="text-sm text-muted">الحالة</p>
+          <span class="badge ${getStatusBadgeClass(txn.status)}">${getStatusLabel(txn.status)}</span>
+        </div>
+
+        ${payBtn}
+      `;
+      console.log('Modal rendered successfully');
+
+    } catch (error) {
+      console.error('Error in viewTransaction:', error);
+      body.innerHTML = '<div class="alert alert-error">حدث خطأ في تحميل المعاملة</div>';
+    }
+  }
+
+  function closeModal() {
+    document.getElementById('transaction-modal').classList.add('hidden');
+  }
+
+  // Filter tabs
+  document.querySelectorAll('.tab[data-status]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab[data-status]').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentFilter = tab.dataset.status;
+      loadTransactions(currentFilter);
+    });
+  });
+
+  document.addEventListener('DOMContentLoaded', () => loadTransactions());
+</script>
+
+<style>
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal.hidden {
+    display: none !important;
+  }
+
+  .modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-content {
+    background: white;
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-xl);
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-6);
+    border-bottom: 1px solid var(--gray-200);
+  }
+
+  #modal-body {
+    padding: var(--space-6);
+  }
+
+  .pending-item {
+    background: white;
+    border-radius: var(--radius-xl);
+    padding: var(--space-4);
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--space-3);
+    border: 1px solid var(--gray-200);
+  }
+
+  @media (max-width: 768px) {
+    .pending-item {
+      flex-direction: column;
+      text-align: center;
+      gap: var(--space-3);
+    }
+  }
+</style>
+{% endblock %}

@@ -13,17 +13,16 @@ def create_app(config_name=None):
     if config_name is None:
         config_name = os.environ.get('FLASK_ENV', 'development')
 
-    # Get the frontend build directory
-    frontend_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'frontend', 'dist')
-    static_folder = os.path.join(frontend_folder, 'static')
-
+    # Configure app with static and template folders
+    app_folder = os.path.dirname(__file__)
+    
     app = Flask(
         __name__,
-        static_folder=static_folder,
+        static_folder=os.path.join(app_folder, 'static'),
+        template_folder=os.path.join(app_folder, 'templates'),
         static_url_path='/static'
     )
     app.config.from_object(config[config_name])
-    app.config['FRONTEND_FOLDER'] = frontend_folder
 
     # Initialize extensions
     register_extensions(app)
@@ -100,41 +99,18 @@ def register_extensions(app):
 
 def register_blueprints(app):
     """Register Flask blueprints"""
+    # API routes
     from app.api.v1 import api_v1_bp
     app.register_blueprint(api_v1_bp, url_prefix='/api/v1')
+    
+    # Frontend routes (HTML pages)
+    from app.frontend import frontend_bp
+    app.register_blueprint(frontend_bp)
 
 
 def register_frontend_routes(app):
-    """Register routes to serve React frontend in production"""
-
-    @app.route('/')
-    def serve_index():
-        """Serve the React app's index.html"""
-        frontend_folder = app.config.get('FRONTEND_FOLDER')
-        if frontend_folder and os.path.exists(os.path.join(frontend_folder, 'index.html')):
-            return send_from_directory(frontend_folder, 'index.html')
-        return jsonify({'message': 'Bariq Al-Yusr API', 'version': '1.0.0'})
-
-    @app.route('/<path:path>')
-    def serve_static_or_index(path):
-        """Serve static files or fall back to index.html for client-side routing"""
-        frontend_folder = app.config.get('FRONTEND_FOLDER')
-
-        # Skip API routes
-        if path.startswith('api/'):
-            return jsonify({'success': False, 'message': 'Not found'}), 404
-
-        if frontend_folder:
-            # Try to serve the requested file
-            file_path = os.path.join(frontend_folder, path)
-            if os.path.isfile(file_path):
-                return send_from_directory(frontend_folder, path)
-
-            # Fall back to index.html for client-side routing
-            if os.path.exists(os.path.join(frontend_folder, 'index.html')):
-                return send_from_directory(frontend_folder, 'index.html')
-
-        return jsonify({'success': False, 'message': 'Not found'}), 404
+    """Register static file routes"""
+    pass  # Static files are served automatically from app/static/
 
 
 def register_error_handlers(app):

@@ -1,0 +1,87 @@
+{% extends "merchant/layout.html" %}
+
+{% block title %}المعاملات - التاجر{% endblock %}
+
+{% block page_content %}
+<div class="card">
+  <div class="card-header">
+    <h2 style="font-size: 1.5rem; margin: 0;">المعاملات</h2>
+    <a href="/merchant/new-transaction" class="btn btn-primary btn-sm">➕ معاملة جديدة</a>
+  </div>
+
+  <div id="transactions-content">
+    <div class="loading-container">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+  async function loadTransactions() {
+    const container = document.getElementById('transactions-content');
+
+    try {
+      const result = await API.merchant.getTransactions({ per_page: 50 });
+      console.log('Transactions API result:', result);
+
+      // Safely extract transactions array
+      let transactions = [];
+      if (result.success && result.data?.data?.transactions && Array.isArray(result.data.data.transactions)) {
+        transactions = result.data.data.transactions;
+      } else if (result.success && Array.isArray(result.data?.data)) {
+        transactions = result.data.data;
+      }
+      console.log('Transactions extracted:', transactions);
+
+      if (transactions.length === 0) {
+        container.innerHTML = `
+          <div class="text-center p-6 text-muted">
+            <span style="font-size: 3rem;">📭</span>
+            <p class="mt-4">لا توجد معاملات حتى الآن</p>
+            <a href="/merchant/new-transaction" class="btn btn-primary mt-4">إنشاء معاملة جديدة</a>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>رقم المرجع</th>
+                <th>العميل</th>
+                <th>التاريخ</th>
+                <th>المبلغ</th>
+                <th>المدفوع</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${transactions.map(txn => `
+                <tr>
+                  <td style="direction: ltr;">${txn.reference_number || '-'}</td>
+                  <td>${txn.customer?.full_name_ar || 'عميل'}</td>
+                  <td>${formatDate(txn.transaction_date)}</td>
+                  <td class="font-bold">${formatNumber(txn.total_amount)} ريال</td>
+                  <td>${formatNumber(txn.paid_amount || 0)} ريال</td>
+                  <td><span class="badge ${getStatusBadgeClass(txn.status)}">${getStatusLabel(txn.status)}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+      showError(container, 'حدث خطأ في تحميل المعاملات');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', loadTransactions);
+</script>
+{% endblock %}

@@ -272,7 +272,65 @@ class TransactionService:
             }
         }
 
-    # ==================== Confirm Transaction ====================
+    # ==================== Confirm/Reject Transaction ====================
+
+    @staticmethod
+    def reject_transaction(customer_id, transaction_id, reason=None):
+        """Customer rejects a pending transaction"""
+        transaction = Transaction.query.filter_by(
+            id=transaction_id,
+            customer_id=customer_id
+        ).first()
+
+        if not transaction:
+            return {
+                'success': False,
+                'message': 'Transaction not found',
+                'error_code': 'TXN_001'
+            }
+
+        if transaction.status != 'pending':
+            return {
+                'success': False,
+                'message': f'Cannot reject transaction with status: {transaction.status}',
+                'error_code': 'TXN_002'
+            }
+
+        try:
+            # Update transaction status to rejected
+            transaction.status = 'rejected'
+            transaction.cancellation_reason = reason or 'Rejected by customer'
+            transaction.updated_at = datetime.utcnow()
+
+            db.session.commit()
+
+            # Notify merchant about rejection
+            TransactionService._notify_merchant_rejected(transaction, reason)
+
+            return {
+                'success': True,
+                'message': 'Transaction rejected successfully',
+                'data': {
+                    'transaction': transaction.to_dict()
+                }
+            }
+        except Exception as e:
+            db.session.rollback()
+            return {
+                'success': False,
+                'message': f'Failed to reject transaction: {str(e)}',
+                'error_code': 'SYS_001'
+            }
+
+    @staticmethod
+    def _notify_merchant_rejected(transaction, reason):
+        """Send notification to merchant about rejected transaction"""
+        try:
+            # Create notification for merchant (would need a merchant notification system)
+            # For now, we just log it
+            pass
+        except Exception:
+            pass
 
     @staticmethod
     def confirm_transaction(customer_id, transaction_id):

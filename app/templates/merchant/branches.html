@@ -1,0 +1,81 @@
+{% extends "merchant/layout.html" %}
+
+{% block title %}الفروع - التاجر{% endblock %}
+
+{% block page_content %}
+<div class="card">
+  <div class="card-header">
+    <h2 style="font-size: 1.5rem; margin: 0;">الفروع</h2>
+  </div>
+
+  <div id="branches-content">
+    <div class="loading-container">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+  async function loadBranches() {
+    const container = document.getElementById('branches-content');
+
+    try {
+      const result = await API.merchant.getBranches();
+      console.log('Branches API result:', result);
+
+      // Safely extract branches array
+      let branches = [];
+      if (result.success && result.data?.data?.branches && Array.isArray(result.data.data.branches)) {
+        branches = result.data.data.branches;
+      } else if (result.success && Array.isArray(result.data?.data)) {
+        branches = result.data.data;
+      }
+      console.log('Branches extracted:', branches);
+
+      if (branches.length === 0) {
+        container.innerHTML = `
+          <div class="text-center p-6 text-muted">
+            <span style="font-size: 3rem;">🏪</span>
+            <p class="mt-4">لا توجد فروع حتى الآن</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="grid grid-3">
+          ${branches.map(b => `
+            <div class="card">
+              <div class="flex items-center gap-4 mb-4">
+                <div style="font-size: 2rem;">🏪</div>
+                <div>
+                  <h3 style="margin: 0; font-size: 1.125rem;">${b.name_ar || b.name_en || '-'}</h3>
+                  <p class="text-sm text-muted">${b.city || '-'}</p>
+                </div>
+              </div>
+              <div class="text-sm">
+                <p><strong>الحي:</strong> ${b.district || '-'}</p>
+                <p><strong>الكود:</strong> <span dir="ltr">${b.code || '-'}</span></p>
+              </div>
+              <div class="mt-4">
+                <span class="badge ${getStatusBadgeClass(b.is_active ? 'active' : 'inactive')}">
+                  ${b.is_active ? 'نشط' : 'غير نشط'}
+                </span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+    } catch (error) {
+      console.error('Error loading branches:', error);
+      showError(container, 'حدث خطأ في تحميل الفروع');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', loadBranches);
+</script>
+{% endblock %}

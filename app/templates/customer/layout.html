@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block navbar %}
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="/customer" class="navbar-brand">
+            <div class="navbar-brand-icon">ب</div>
+            <div>
+                <div>بريق اليسر</div>
+                <div style="font-size: 0.75rem; color: var(--gray-500); font-weight: normal;">Bariq Al-Yusr</div>
+            </div>
+        </a>
+
+        <div class="navbar-actions">
+            <button onclick="logout()" class="btn btn-secondary btn-sm" title="تسجيل الخروج">
+                <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                    </path>
+                </svg>
+            </button>
+        </div>
+    </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <ul class="sidebar-nav">
+            <li>
+                <a href="/customer" class="{{ 'active' if active_page == 'dashboard' else '' }}">
+                    <span class="icon">🏠</span>
+                    <span>الرئيسية</span>
+                </a>
+            </li>
+            <li>
+                <a href="/customer/transactions" class="{{ 'active' if active_page == 'transactions' else '' }}">
+                    <span class="icon">📋</span>
+                    <span>معاملاتي</span>
+                </a>
+            </li>
+            <li>
+                <a href="/customer/payments" class="{{ 'active' if active_page == 'payments' else '' }}">
+                    <span class="icon">💰</span>
+                    <span>المدفوعات</span>
+                </a>
+            </li>
+            <li>
+                <a href="/customer/credit" class="{{ 'active' if active_page == 'credit' else '' }}">
+                    <span class="icon">📈</span>
+                    <span>حد الشراء</span>
+                </a>
+            </li>
+            <li>
+                <a href="/customer/profile" class="{{ 'active' if active_page == 'profile' else '' }}">
+                    <span class="icon">👤</span>
+                    <span>حسابي</span>
+                </a>
+            </li>
+        </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block page_content %}{% endblock %}
+    </main>
+</div>
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-nav">
+    <a href="/customer" class="{{ 'active' if active_page == 'dashboard' else '' }}">
+        <span class="icon">🏠</span>
+        <span>الرئيسية</span>
+    </a>
+    <a href="/customer/transactions" class="{{ 'active' if active_page == 'transactions' else '' }}">
+        <span class="icon">📋</span>
+        <span>معاملاتي</span>
+    </a>
+    <a href="/customer/payments" class="{{ 'active' if active_page == 'payments' else '' }}">
+        <span class="icon">💰</span>
+        <span>المدفوعات</span>
+    </a>
+    <a href="/customer/credit" class="{{ 'active' if active_page == 'credit' else '' }}">
+        <span class="icon">📈</span>
+        <span>حد الشراء</span>
+    </a>
+    <a href="/customer/profile" class="{{ 'active' if active_page == 'profile' else '' }}">
+        <span class="icon">👤</span>
+        <span>حسابي</span>
+    </a>
+</nav>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Check authentication
+    if (!requireAuth(['customer'])) {
+        // Will redirect to login
+    }
+</script>
+{{ super() }}
+{% endblock %}

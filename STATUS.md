@@ -1,179 +1,179 @@
-# Bariq Project Status
+# Bariq Web App - Session Status (December 23, 2025)
 
-## Last Updated: December 22, 2024
+## Latest Updates (Current Session)
 
-## All Steps Completed!
+### Bug Fixes
+1. **Transaction Details Modal** - Fixed error handling and response parsing
+   - Improved token validation
+   - Better error messages for failed API calls
+   - Corrected response structure extraction
 
-### Step 1: Project Structure (DONE)
-- [x] Flask app factory
-- [x] All database models (14 models)
-- [x] All API routes (100+ endpoints)
-- [x] Authentication system (JWT + Nafath mock)
-- [x] Placeholder services
-- [x] Configuration files
+2. **Reject Transaction** - Now fully functional
+   - Frontend uses new API endpoint
+   - Proper error handling and success feedback
 
-### Step 2: Implement Core Services (DONE)
-- [x] CustomerService - 11 methods
-- [x] MerchantService - 20 methods
-- [x] TransactionService - 15 methods
-- [x] PaymentService - 9 methods
-- [x] SettlementService - 13 methods
-
-### Step 3: Database Setup (DONE)
-- [x] Initialized Flask-Migrate
-- [x] Created initial migration
-- [x] Applied migration (18 tables created)
-- [x] Created seed data script
-- [x] Seeded database with test data
-
-### Step 4: Testing (DONE)
-- [x] Health endpoint: `/api/v1/health`
-- [x] Admin login: `admin@bariq.sa / Admin@123`
-- [x] Merchant login: `owner@albaraka.sa / Owner@123`
-- [x] Public endpoints working
-
-### Step 5: Frontend Implementation (DONE)
-- [x] React + Vite + Tailwind CSS v4 setup
-- [x] Customer Portal with RTL Arabic support
-- [x] Merchant Portal with dashboard
-- [x] Admin Portal structure
-- [x] Authentication context and protected routes
-
-### Step 6: New Features (December 22, 2024) (DONE)
-- [x] **Customer Username/Password Login** - Customers can now login with username/password after initial Nafath registration
-- [x] **Bariq ID System** - Each customer gets a unique 6-digit Bariq ID for merchant lookups
-- [x] **Merchant Customer Lookup by Bariq ID** - Merchants search customers by Bariq ID instead of National ID
-- [x] **Transaction Confirmation System** - Customers must confirm pending transactions via app notification
-- [x] **Points Display System** - UI shows "points" instead of "SAR" (1 point = 1 SAR)
-- [x] **Fixed API Route Paths** - Frontend now uses correct `/merchants/me/...` paths
+3. **Change Password** - Now fully functional
+   - Frontend uses new API endpoint
+   - Validates passwords before submitting
 
 ---
 
-## How to Run:
+## New API Endpoints Added
 
-### Backend (Flask):
-```bash
-cd ~/Desktop/bariq
-source venv/bin/activate
-flask run --port 5001
-```
+### 1. Reject Transaction
+- **Route**: `POST /api/v1/customers/me/transactions/<id>/reject`
+- **Body**: `{ "reason": "optional reason" }`
+- **Response**: Returns transaction with status "rejected"
 
-### Frontend (React):
-```bash
-cd ~/Desktop/bariq/frontend
-npm run dev
-```
-
-**Servers:**
-- Backend: http://localhost:5001
-- Frontend: http://localhost:3000
+### 2. Change Password
+- **Route**: `PUT /api/v1/customers/me/password`
+- **Body**: `{ "current_password": "...", "new_password": "..." }`
+- **Response**: Success/error message
 
 ---
 
-## Test Accounts:
+## Frontend Enhancements
 
-| Role | Login | Password | Notes |
-|------|-------|----------|-------|
-| **Customer** | `ahmed_ali` | `Customer@123` | Bariq ID: `123456`, 2,500 points |
-| **Merchant Owner** | `owner@albaraka.sa` | `Owner@123` | Al-Baraka Supermarket |
-| **Merchant Cashier** | `cashier@albaraka.sa` | `Cashier@123` | Al-Baraka Branch |
-| **Admin** | `admin@bariq.sa` | `Admin@123` | Full admin access |
+### 1. Landing Page (`/`) - Complete Redesign
+- Modern hero section with animated card
+- Trust badges (Sharia compliant, No interest, No fees)
+- Statistics section (merchants, customers, 0% fees, 10 days)
+- 6 feature cards with hover animations
+- 4-step "How it works" timeline with connected line
+- CTA section with gradient background
+- Professional footer with links
 
----
+### 2. Login Page (`/login`) - Complete Redesign
+- Split layout with visual side
+- Animated floating icon
+- Modern form styling with focus states
+- Tab switching between Customer/Merchant
+- Responsive design (visual hidden on mobile)
 
-## New Flow Summary:
-
-### Customer Registration & Login:
-1. New customer registers via Nafath (first time only)
-2. After verification, customer creates username/password
-3. Customer receives unique 6-digit **Bariq ID**
-4. Future logins use username/password
-
-### Merchant Transaction Flow:
-1. Customer provides their **Bariq ID** to merchant
-2. Merchant enters Bariq ID to look up customer
-3. System shows customer name, status, and available points
-4. Merchant creates transaction with items
-5. Customer receives notification to confirm
-6. Customer confirms in their app
-7. Points are deducted from customer's balance
-
-### Points System:
-- 1 Point = 1 SAR (Saudi Riyal)
-- Displayed as "points" throughout the UI
-- Clear indication: "1 point = 1 SAR"
+### 3. API.js Updates
+- Added `rejectTransaction(id, reason)` method
+- Added `changePassword(currentPassword, newPassword)` method
 
 ---
 
-## API Endpoints Summary:
+## Previous Session Bug Fixes
 
-### Authentication:
-- `POST /api/v1/auth/customer/login` - Customer username/password login
-- `POST /api/v1/auth/merchant/login` - Merchant login
-- `POST /api/v1/auth/admin/login` - Admin login
-- `POST /api/v1/auth/nafath/initiate` - Start Nafath registration
-- `POST /api/v1/auth/nafath/verify` - Complete Nafath registration
-- `POST /api/v1/auth/refresh` - Refresh JWT token
+### Merchant Pages - Array Extraction Fixes
+Fixed "map is not a function" errors across merchant pages:
 
-### Customer:
-- `GET /api/v1/customers/me` - Get profile
-- `GET /api/v1/customers/me/credit` - Get credit/points details
-- `GET /api/v1/customers/me/transactions` - Get transactions
-- `POST /api/v1/customers/me/transactions/:id/confirm` - Confirm pending transaction
-- `GET /api/v1/customers/me/notifications` - Get notifications
-
-### Merchant:
-- `GET /api/v1/merchants/customers/lookup/:bariq_id` - Look up customer by Bariq ID
-- `POST /api/v1/merchants/me/transactions` - Create new transaction
-- `GET /api/v1/merchants/me/transactions` - Get transactions
-- `GET /api/v1/merchants/me/branches` - Get branches
-- `GET /api/v1/merchants/me/staff` - Get staff
-- `POST /api/v1/merchants/me/staff` - Add staff member
-
-### Admin:
-- `/api/v1/admin/...` - Admin management endpoints
-
-### Public:
-- `GET /api/v1/public/cities` - Get cities list
-- `GET /api/v1/public/business-types` - Get business types
+1. **Staff Page** (`/merchant/staff`)
+2. **Settlements Page** (`/merchant/settlements`)
+3. **Transactions Page** (`/merchant/transactions`)
 
 ---
 
-## Key Files:
+## Previous Session Features
 
-### Backend:
-- `app/models/customer.py` - Customer model with bariq_id, username, password
-- `app/services/auth_service.py` - Authentication including customer login
-- `app/services/transaction_service.py` - Transaction creation with Bariq ID
-- `app/api/v1/merchants/__init__.py` - Merchant routes including customer lookup
-- `scripts/seed_data.py` - Database seeding script
+### 1. Merchant New Transaction Page (`/merchant/new-transaction`)
+- Product items support (name, unit price, quantity)
+- Dynamic add/remove product rows
+- Real-time totals calculation
+- Credit verification with warning
+- Payment term days configuration
 
-### Frontend:
-- `frontend/src/services/api.js` - API service with all endpoints
-- `frontend/src/context/AuthContext.jsx` - Authentication context
-- `frontend/src/pages/customer/CustomerDashboard.jsx` - Customer dashboard with pending confirmations
-- `frontend/src/pages/merchant/NewTransactionPage.jsx` - New transaction with Bariq ID lookup
+### 2. Customer Transactions Page (`/customer/transactions`)
+- Pending transactions section
+- Confirm/Reject buttons for pending transactions
+- Filter tabs (All, Confirmed, Paid, Overdue)
+- Transaction details modal
+- Pay button linking to payment page
+
+### 3. Customer Profile Page (`/customer/profile`)
+- User avatar with initial
+- Personal info display grid
+- Bariq ID card with teal gradient
+- Credit summary section
+- Edit Profile modal
+- Change Password modal
+
+### 4. Customer Payment Page (`/customer/pay`)
+- Debt summary cards
+- Transaction selection
+- Payment form with max validation
+- 4 payment method options
 
 ---
 
-## Database:
-- SQLite for development: `instance/bariq_dev.db`
-- PostgreSQL for production (update DATABASE_URL in .env)
+## Files Modified/Created This Session
 
-### New Customer Fields:
-- `bariq_id` - 6-digit unique identifier
-- `username` - Login username
-- `password_hash` - Hashed password
+| File | Action | Description |
+|------|--------|-------------|
+| `app/templates/index.html` | Rewritten | Modern landing page |
+| `app/templates/login.html` | Rewritten | Modern split-layout login |
+| `app/templates/customer/transactions.html` | Modified | Fixed modal, updated reject function |
+| `app/templates/customer/profile.html` | Modified | Connected change password to API |
+| `app/static/js/api.js` | Modified | Added rejectTransaction, changePassword |
+| `app/api/v1/customers/__init__.py` | Modified | Added reject, password endpoints |
+| `app/services/customer_service.py` | Modified | Added change_password method |
+| `app/services/transaction_service.py` | Modified | Added reject_transaction method |
 
 ---
 
-## Next Steps (Optional Enhancements):
-- [ ] Add unit tests with pytest
-- [ ] Add API documentation with Swagger/OpenAPI
-- [ ] Set up Redis for rate limiting
-- [ ] Integrate real Nafath API
-- [ ] Add SMS/Email notifications (real integration)
-- [ ] Set up Celery for background tasks
-- [ ] Deploy to production server
-- [ ] Add real-time notifications (WebSocket)
-- [ ] Customer app push notifications
+## API Routes Summary
+
+### Customer Routes
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/customers/me` | GET | Get profile |
+| `/customers/me` | PUT | Update profile |
+| `/customers/me/password` | PUT | Change password |
+| `/customers/me/credit` | GET | Get credit details |
+| `/customers/me/transactions` | GET | List transactions |
+| `/customers/me/transactions/<id>` | GET | Get transaction details |
+| `/customers/me/transactions/<id>/confirm` | POST | Confirm pending transaction |
+| `/customers/me/transactions/<id>/reject` | POST | Reject pending transaction |
+| `/customers/me/payments` | GET | List payments |
+| `/customers/me/payments` | POST | Make payment |
+| `/customers/me/debt` | GET | Get debt summary |
+
+---
+
+## Design Theme
+
+**Teal & White Premium Theme**
+- Primary color: `#14b8a6` (Teal-500)
+- Gradients: Teal-600 to Teal-800
+- Modern animations (float, slide-up, pulse-glow)
+- RTL Arabic support
+- Mobile responsive design
+
+---
+
+## Test URLs
+
+- Landing: http://localhost:5001/
+- Login: http://localhost:5001/login
+- Customer Dashboard: http://localhost:5001/customer
+- Customer Transactions: http://localhost:5001/customer/transactions
+- Customer Profile: http://localhost:5001/customer/profile
+- Customer Payment: http://localhost:5001/customer/pay
+- Merchant Dashboard: http://localhost:5001/merchant
+- Merchant New Transaction: http://localhost:5001/merchant/new-transaction
+
+**Test Credentials:**
+- Customer: `ahmed_ali` / `Customer@123`
+- Merchant: (check seed data)
+
+---
+
+## Known Issues / Pending
+
+1. **Admin Dashboard** - Not implemented (no `/admin` routes)
+2. **User Registration** - Nafath integration pending
+3. **Notifications Page** - Not implemented
+4. **Reports/Analytics** - Basic metrics only
+
+---
+
+## Next Steps (Recommended)
+
+1. Implement Admin Dashboard
+2. Add customer registration flow (Nafath mock)
+3. Enhance merchant staff management (CRUD)
+4. Add real-time notifications
+5. Implement detailed reports/analytics

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block navbar %}
+<nav class="navbar">
+    <div class="container navbar-content">
+        <a href="/merchant" class="navbar-brand">
+            <div class="navbar-brand-icon">ب</div>
+            <div>
+                <div>بريق اليسر</div>
+                <div style="font-size: 0.75rem; color: var(--gray-500); font-weight: normal;">لوحة التاجر</div>
+            </div>
+        </a>
+
+        <div class="navbar-actions">
+            <button onclick="logout()" class="btn btn-secondary btn-sm" title="تسجيل الخروج">
+                <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                    </path>
+                </svg>
+            </button>
+        </div>
+    </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <ul class="sidebar-nav">
+            <li>
+                <a href="/merchant" class="{{ 'active' if active_page == 'dashboard' else '' }}">
+                    <span class="icon">🏠</span>
+                    <span>الرئيسية</span>
+                </a>
+            </li>
+            <li>
+                <a href="/merchant/new-transaction" class="{{ 'active' if active_page == 'new-transaction' else '' }}">
+                    <span class="icon">➕</span>
+                    <span>معاملة جديدة</span>
+                </a>
+            </li>
+            <li>
+                <a href="/merchant/transactions" class="{{ 'active' if active_page == 'transactions' else '' }}">
+                    <span class="icon">📋</span>
+                    <span>المعاملات</span>
+                </a>
+            </li>
+            <li>
+                <a href="/merchant/settlements" class="{{ 'active' if active_page == 'settlements' else '' }}">
+                    <span class="icon">💰</span>
+                    <span>التسويات</span>
+                </a>
+            </li>
+            <li>
+                <a href="/merchant/staff" class="{{ 'active' if active_page == 'staff' else '' }}">
+                    <span class="icon">👥</span>
+                    <span>الموظفون</span>
+                </a>
+            </li>
+            <li>
+                <a href="/merchant/branches" class="{{ 'active' if active_page == 'branches' else '' }}">
+                    <span class="icon">🏪</span>
+                    <span>الفروع</span>
+                </a>
+            </li>
+        </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block page_content %}{% endblock %}
+    </main>
+</div>
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-nav">
+    <a href="/merchant" class="{{ 'active' if active_page == 'dashboard' else '' }}">
+        <span class="icon">🏠</span>
+        <span>الرئيسية</span>
+    </a>
+    <a href="/merchant/new-transaction" class="{{ 'active' if active_page == 'new-transaction' else '' }}">
+        <span class="icon">➕</span>
+        <span>جديد</span>
+    </a>
+    <a href="/merchant/transactions" class="{{ 'active' if active_page == 'transactions' else '' }}">
+        <span class="icon">📋</span>
+        <span>المعاملات</span>
+    </a>
+    <a href="/merchant/settlements" class="{{ 'active' if active_page == 'settlements' else '' }}">
+        <span class="icon">💰</span>
+        <span>التسويات</span>
+    </a>
+</nav>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Check authentication
+    if (!requireAuth(['merchant'])) {
+        // Will redirect to login
+    }
+</script>
+{{ super() }}
+{% endblock %}

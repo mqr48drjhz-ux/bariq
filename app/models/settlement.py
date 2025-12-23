@@ -61,9 +61,14 @@ class Settlement(db.Model, TimestampMixin):
             'period_start': self.period_start.isoformat() if self.period_start else None,
             'period_end': self.period_end.isoformat() if self.period_end else None,
             'gross_amount': float(self.gross_amount),
+            'total_amount': float(self.gross_amount),  # Alias for frontend
             'returns_amount': float(self.returns_amount),
             'commission_amount': float(self.commission_amount),
             'net_amount': float(self.net_amount),
             'transaction_count': self.transaction_count,
+            'return_count': self.return_count,
             'status': self.status,
+            'transfer_reference': self.transfer_reference,
+            'transferred_at': self.transferred_at.isoformat() if self.transferred_at else None,
+            'approved_at': self.approved_at.isoformat() if self.approved_at else None,
         }

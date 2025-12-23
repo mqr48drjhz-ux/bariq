@@ -1,0 +1,83 @@
+{% extends "merchant/layout.html" %}
+
+{% block title %}الموظفون - التاجر{% endblock %}
+
+{% block page_content %}
+<div class="card">
+  <div class="card-header">
+    <h2 style="font-size: 1.5rem; margin: 0;">الموظفون</h2>
+  </div>
+
+  <div id="staff-content">
+    <div class="loading-container">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+  async function loadStaff() {
+    const container = document.getElementById('staff-content');
+
+    try {
+      const result = await API.merchant.getStaff();
+      console.log('Staff API result:', result);
+
+      // Safely extract staff array
+      let staff = [];
+      if (result.success && result.data?.data?.staff && Array.isArray(result.data.data.staff)) {
+        staff = result.data.data.staff;
+      } else if (result.success && Array.isArray(result.data?.data)) {
+        staff = result.data.data;
+      }
+      console.log('Staff extracted:', staff);
+
+      if (staff.length === 0) {
+        container.innerHTML = `
+          <div class="text-center p-6 text-muted">
+            <span style="font-size: 3rem;">👥</span>
+            <p class="mt-4">لا يوجد موظفون حتى الآن</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>الاسم</th>
+                <th>البريد الإلكتروني</th>
+                <th>الدور</th>
+                <th>الفرع</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${staff.map(s => `
+                <tr>
+                  <td>${s.full_name || '-'}</td>
+                  <td style="direction: ltr;">${s.email || '-'}</td>
+                  <td>${s.role || '-'}</td>
+                  <td>${s.branch?.name_ar || 'الكل'}</td>
+                  <td><span class="badge ${getStatusBadgeClass(s.status)}">${getStatusLabel(s.status)}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+    } catch (error) {
+      console.error('Error loading staff:', error);
+      showError(container, 'حدث خطأ في تحميل الموظفين');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', loadStaff);
+</script>
+{% endblock %}

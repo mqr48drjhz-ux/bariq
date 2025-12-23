@@ -1,0 +1,142 @@
+{% extends "merchant/layout.html" %}
+
+{% block title %}لوحة التحكم - التاجر{% endblock %}
+
+{% block page_content %}
+<div id="dashboard-content">
+    <div class="loading-container">
+        <div class="spinner"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+    async function loadDashboard() {
+        const container = document.getElementById('dashboard-content');
+        const user = TokenManager.getUser();
+
+        try {
+            // Load dashboard data
+            const [dashboardRes, transactionsRes] = await Promise.all([
+                API.merchant.getDashboard(),
+                API.merchant.getTransactions({ per_page: 5 }),
+            ]);
+
+            const dashboard = dashboardRes.data?.data || {};
+            const transactions = transactionsRes.data?.data?.transactions || [];
+
+            container.innerHTML = `
+        <!-- Welcome Banner -->
+        <div class="welcome-banner">
+          <h1>مرحباً، ${user?.merchant?.name_ar || 'التاجر'}</h1>
+          <p>إدارة معاملاتك ومبيعاتك</p>
+        </div>
+        
+        <!-- Stats Cards -->
+        <div class="grid grid-4 mb-6">
+          <div class="stat-card teal">
+            <div class="stat-card-header">
+              <span>إجمالي المبيعات</span>
+              <span style="font-size: 2rem;">💰</span>
+            </div>
+            <div class="stat-card-value">${formatNumber(dashboard.total_sales || 0)}</div>
+            <div class="stat-card-label">ريال</div>
+          </div>
+          
+          <div class="stat-card emerald">
+            <div class="stat-card-header">
+              <span>المعاملات المؤكدة</span>
+              <span style="font-size: 2rem;">✅</span>
+            </div>
+            <div class="stat-card-value">${dashboard.confirmed_transactions || 0}</div>
+            <div class="stat-card-label">معاملة</div>
+          </div>
+          
+          <div class="stat-card amber">
+            <div class="stat-card-header">
+              <span>بانتظار التأكيد</span>
+              <span style="font-size: 2rem;">⏳</span>
+            </div>
+            <div class="stat-card-value">${dashboard.pending_transactions || 0}</div>
+            <div class="stat-card-label">معاملة</div>
+          </div>
+          
+          <div class="stat-card blue">
+            <div class="stat-card-header">
+              <span>بانتظار التسوية</span>
+              <span style="font-size: 2rem;">📊</span>
+            </div>
+            <div class="stat-card-value">${formatNumber(dashboard.pending_settlement || 0)}</div>
+            <div class="stat-card-label">ريال</div>
+          </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="grid grid-3 mb-6">
+          <a href="/merchant/new-transaction" class="quick-action teal">
+            <span class="icon">➕</span>
+            <span class="font-medium">معاملة جديدة</span>
+          </a>
+          <a href="/merchant/transactions" class="quick-action emerald">
+            <span class="icon">📋</span>
+            <span class="font-medium">عرض المعاملات</span>
+          </a>
+          <a href="/merchant/settlements" class="quick-action amber">
+            <span class="icon">💰</span>
+            <span class="font-medium">التسويات</span>
+          </a>
+        </div>
+        
+        <!-- Recent Transactions -->
+        <div class="card">
+          <div class="card-header">
+            <h2 style="font-size: 1.25rem; margin: 0;">آخر المعاملات</h2>
+            <a href="/merchant/transactions" class="text-primary">عرض الكل</a>
+          </div>
+          
+          ${transactions.length > 0 ? `
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>رقم المرجع</th>
+                    <th>العميل</th>
+                    <th>التاريخ</th>
+                    <th>المبلغ</th>
+                    <th>الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${transactions.map(txn => `
+                    <tr>
+                      <td style="direction: ltr;">${txn.reference_number || '-'}</td>
+                      <td>${txn.customer?.full_name_ar || 'عميل'}</td>
+                      <td>${formatDate(txn.transaction_date)}</td>
+                      <td class="font-bold">${formatNumber(txn.total_amount)} ريال</td>
+                      <td><span class="badge ${getStatusBadgeClass(txn.status)}">${getStatusLabel(txn.status)}</span></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : `
+            <div class="text-center p-6 text-muted">
+              <span style="font-size: 3rem;">📭</span>
+              <p class="mt-4">لا توجد معاملات حتى الآن</p>
+              <a href="/merchant/new-transaction" class="btn btn-primary mt-4">إنشاء معاملة جديدة</a>
+            </div>
+          `}
+        </div>
+      `;
+
+        } catch (error) {
+            console.error('Error loading dashboard:', error);
+            showError(container, 'حدث خطأ في تحميل البيانات');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+{% endblock %}

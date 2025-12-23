@@ -1,0 +1,514 @@
+{% extends "customer/layout.html" %}
+
+{% block title %}حسابي - بريق اليسر{% endblock %}
+
+{% block page_content %}
+<div id="profile-content">
+  <div class="loading-container">
+    <div class="spinner"></div>
+  </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div id="edit-modal" class="modal hidden">
+  <div class="modal-overlay" onclick="closeEditModal()"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 style="margin: 0;">تعديل البيانات</h3>
+      <button onclick="closeEditModal()" class="btn btn-secondary btn-sm">✕</button>
+    </div>
+    <div id="edit-modal-body">
+      <form onsubmit="saveProfile(event)">
+        <div class="form-group">
+          <label class="form-label">البريد الإلكتروني</label>
+          <input type="email" id="edit-email" class="form-input" dir="ltr" placeholder="email@example.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">رقم الهاتف</label>
+          <input type="tel" id="edit-phone" class="form-input" dir="ltr" placeholder="05xxxxxxxx">
+        </div>
+        <div class="form-group">
+          <label class="form-label">المدينة</label>
+          <input type="text" id="edit-city" class="form-input" placeholder="الرياض">
+        </div>
+        <div class="form-group">
+          <label class="form-label">الحي</label>
+          <input type="text" id="edit-district" class="form-input" placeholder="العليا">
+        </div>
+        <div class="form-group">
+          <label class="form-label">اللغة</label>
+          <select id="edit-language" class="form-input">
+            <option value="ar">العربية</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+
+        <div id="edit-error" class="alert alert-error hidden"></div>
+        <div id="edit-success" class="alert alert-success hidden"></div>
+
+        <button type="submit" class="btn btn-primary btn-block">حفظ التغييرات</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div id="password-modal" class="modal hidden">
+  <div class="modal-overlay" onclick="closePasswordModal()"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 style="margin: 0;">تغيير كلمة المرور</h3>
+      <button onclick="closePasswordModal()" class="btn btn-secondary btn-sm">✕</button>
+    </div>
+    <div id="password-modal-body">
+      <form onsubmit="changePassword(event)">
+        <div class="form-group">
+          <label class="form-label">كلمة المرور الحالية</label>
+          <input type="password" id="current-password" class="form-input" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">كلمة المرور الجديدة</label>
+          <input type="password" id="new-password" class="form-input" required minlength="8">
+          <small class="text-muted">8 أحرف على الأقل</small>
+        </div>
+        <div class="form-group">
+          <label class="form-label">تأكيد كلمة المرور الجديدة</label>
+          <input type="password" id="confirm-password" class="form-input" required>
+        </div>
+
+        <div id="password-error" class="alert alert-error hidden"></div>
+        <div id="password-success" class="alert alert-success hidden"></div>
+
+        <button type="submit" class="btn btn-primary btn-block">تغيير كلمة المرور</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+  let currentProfile = null;
+
+  async function loadProfile() {
+    const container = document.getElementById('profile-content');
+    console.log('loadProfile called');
+
+    try {
+      const result = await API.customer.getProfile();
+      console.log('Profile API result:', result);
+
+      // Extract profile - API wrapper returns { success, status, data: { success, data: { customer } } }
+      let profile = null;
+      if (result.success && result.data) {
+        profile = result.data.data?.customer || result.data.customer || result.data.data;
+      }
+      console.log('Extracted profile:', profile);
+
+      if (!profile) {
+        container.innerHTML = '<div class="alert alert-error">حدث خطأ في تحميل البيانات</div>';
+        return;
+      }
+
+      currentProfile = profile;
+      const user = TokenManager.getUser();
+
+      container.innerHTML = `
+        <!-- Profile Header -->
+        <div class="card mb-6" style="background: linear-gradient(135deg, var(--teal-50), white);">
+          <div class="flex items-center gap-4 mb-6">
+            <div class="avatar-large">
+              ${(profile.full_name_ar || 'م').charAt(0)}
+            </div>
+            <div style="flex: 1;">
+              <h2 style="margin: 0;">${profile.full_name_ar || '-'}</h2>
+              <p class="text-muted">${profile.full_name_en || ''}</p>
+            </div>
+            <span class="badge ${getStatusBadgeClass(profile.status)}">${getStatusLabel(profile.status)}</span>
+          </div>
+          
+          <!-- Bariq ID Card -->
+          <div class="bariq-id-card">
+            <div>
+              <p class="text-sm" style="color: rgba(255,255,255,0.8);">رقم بريق الخاص بك</p>
+              <p class="bariq-id-number">${profile.bariq_id || '-'}</p>
+              <p class="text-sm" style="color: rgba(255,255,255,0.8);">استخدمه عند الشراء من المتاجر</p>
+            </div>
+            <div style="font-size: 3rem;">🎫</div>
+          </div>
+        </div>
+        
+        <!-- Personal Info -->
+        <div class="card mb-6">
+          <div class="card-header" style="padding: 0 0 var(--space-4) 0;">
+            <h3 style="margin: 0;">📋 المعلومات الشخصية</h3>
+            <button onclick="openEditModal()" class="btn btn-secondary btn-sm">✏️ تعديل</button>
+          </div>
+          
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">اسم المستخدم</span>
+              <span class="info-value">${profile.username || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">البريد الإلكتروني</span>
+              <span class="info-value" style="direction: ltr;">${profile.email || 'غير محدد'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">رقم الهاتف</span>
+              <span class="info-value" style="direction: ltr;">${profile.phone || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">المدينة</span>
+              <span class="info-value">${profile.city || 'غير محدد'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">الحي</span>
+              <span class="info-value">${profile.district || 'غير محدد'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">اللغة</span>
+              <span class="info-value">${profile.language === 'ar' ? 'العربية' : 'English'}</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Credit Info -->
+        <div class="card mb-6">
+          <h3 style="margin: 0 0 var(--space-4) 0;">💰 معلومات النقاط</h3>
+          
+          <div class="grid grid-3">
+            <div class="stat-mini">
+              <span class="stat-mini-value text-primary">${formatNumber(profile.credit_limit)}</span>
+              <span class="stat-mini-label">الحد الائتماني</span>
+            </div>
+            <div class="stat-mini">
+              <span class="stat-mini-value text-success">${formatNumber(profile.available_credit)}</span>
+              <span class="stat-mini-label">المتاح</span>
+            </div>
+            <div class="stat-mini">
+              <span class="stat-mini-value text-danger">${formatNumber(profile.used_credit)}</span>
+              <span class="stat-mini-label">المستخدم</span>
+            </div>
+          </div>
+          
+          <div class="credit-bar mt-4">
+            <div class="credit-bar-fill" style="width: ${profile.credit_limit > 0 ? (profile.used_credit / profile.credit_limit * 100) : 0}%"></div>
+          </div>
+          
+          <a href="/customer/credit" class="btn btn-primary btn-block mt-4">📈 طلب زيادة الحد</a>
+        </div>
+        
+        <!-- Account Settings -->
+        <div class="card mb-6">
+          <h3 style="margin: 0 0 var(--space-4) 0;">⚙️ إعدادات الحساب</h3>
+          
+          <div class="settings-list">
+            <button onclick="openPasswordModal()" class="settings-item">
+              <span>🔒 تغيير كلمة المرور</span>
+              <span>→</span>
+            </button>
+            <a href="/customer/payments" class="settings-item">
+              <span>💳 سجل المدفوعات</span>
+              <span>→</span>
+            </a>
+            <a href="/customer/transactions" class="settings-item">
+              <span>📋 سجل المعاملات</span>
+              <span>→</span>
+            </a>
+          </div>
+        </div>
+        
+        <!-- Logout -->
+        <button onclick="logout()" class="btn btn-danger btn-block">تسجيل الخروج</button>
+      `;
+      console.log('Profile rendered successfully');
+
+      // Pre-fill edit form
+      document.getElementById('edit-email').value = profile.email || '';
+      document.getElementById('edit-phone').value = profile.phone || '';
+      document.getElementById('edit-city').value = profile.city || '';
+      document.getElementById('edit-district').value = profile.district || '';
+      document.getElementById('edit-language').value = profile.language || 'ar';
+
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      showError(container, 'حدث خطأ في تحميل البيانات');
+    }
+  }
+
+  function openEditModal() {
+    document.getElementById('edit-modal').classList.remove('hidden');
+  }
+
+  function closeEditModal() {
+    document.getElementById('edit-modal').classList.add('hidden');
+    document.getElementById('edit-error').classList.add('hidden');
+    document.getElementById('edit-success').classList.add('hidden');
+  }
+
+  function openPasswordModal() {
+    document.getElementById('password-modal').classList.remove('hidden');
+  }
+
+  function closePasswordModal() {
+    document.getElementById('password-modal').classList.add('hidden');
+    document.getElementById('password-error').classList.add('hidden');
+    document.getElementById('password-success').classList.add('hidden');
+    document.getElementById('current-password').value = '';
+    document.getElementById('new-password').value = '';
+    document.getElementById('confirm-password').value = '';
+  }
+
+  async function saveProfile(event) {
+    event.preventDefault();
+
+    const errorEl = document.getElementById('edit-error');
+    const successEl = document.getElementById('edit-success');
+    errorEl.classList.add('hidden');
+    successEl.classList.add('hidden');
+
+    const data = {
+      email: document.getElementById('edit-email').value,
+      phone: document.getElementById('edit-phone').value,
+      city: document.getElementById('edit-city').value,
+      district: document.getElementById('edit-district').value,
+      language: document.getElementById('edit-language').value,
+    };
+
+    try {
+      const result = await API.customer.updateProfile(data);
+
+      if (result.success && result.data.success) {
+        successEl.textContent = 'تم حفظ التغييرات بنجاح';
+        successEl.classList.remove('hidden');
+        setTimeout(() => {
+          closeEditModal();
+          loadProfile();
+        }, 1500);
+      } else {
+        errorEl.textContent = result.data?.message || 'فشل حفظ التغييرات';
+        errorEl.classList.remove('hidden');
+      }
+    } catch (error) {
+      errorEl.textContent = 'حدث خطأ أثناء حفظ التغييرات';
+      errorEl.classList.remove('hidden');
+    }
+  }
+
+  async function changePassword(event) {
+    event.preventDefault();
+
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    const errorEl = document.getElementById('password-error');
+    const successEl = document.getElementById('password-success');
+
+    errorEl.classList.add('hidden');
+    successEl.classList.add('hidden');
+
+    if (newPassword !== confirmPassword) {
+      errorEl.textContent = 'كلمة المرور الجديدة غير متطابقة';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      errorEl.textContent = 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      const result = await API.customer.changePassword(currentPassword, newPassword);
+
+      if (result.success && result.data.success) {
+        successEl.textContent = 'تم تغيير كلمة المرور بنجاح';
+        successEl.classList.remove('hidden');
+        setTimeout(() => closePasswordModal(), 1500);
+      } else {
+        errorEl.textContent = result.data?.message || 'فشل تغيير كلمة المرور';
+        errorEl.classList.remove('hidden');
+      }
+    } catch (error) {
+      errorEl.textContent = 'حدث خطأ أثناء تغيير كلمة المرور';
+      errorEl.classList.remove('hidden');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', loadProfile);
+</script>
+
+<style>
+  .avatar-large {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--teal-500), var(--teal-400));
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: bold;
+  }
+
+  .bariq-id-card {
+    background: linear-gradient(135deg, var(--teal-600), var(--teal-500));
+    color: white;
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .bariq-id-number {
+    font-size: 2.5rem;
+    font-weight: bold;
+    letter-spacing: 0.2em;
+    direction: ltr;
+    margin: var(--space-2) 0;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-4);
+  }
+
+  .info-item {
+    padding: var(--space-3);
+    background: var(--gray-50);
+    border-radius: var(--radius-lg);
+  }
+
+  .info-label {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--gray-500);
+    margin-bottom: var(--space-1);
+  }
+
+  .info-value {
+    display: block;
+    font-weight: 600;
+  }
+
+  .stat-mini {
+    text-align: center;
+    padding: var(--space-4);
+    background: var(--gray-50);
+    border-radius: var(--radius-lg);
+  }
+
+  .stat-mini-value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: bold;
+  }
+
+  .stat-mini-label {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--gray-500);
+  }
+
+  .credit-bar {
+    height: 8px;
+    background: var(--gray-200);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .credit-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--teal-500), var(--teal-400));
+    border-radius: 4px;
+  }
+
+  .settings-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .settings-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4);
+    background: var(--gray-50);
+    border-radius: var(--radius-lg);
+    text-decoration: none;
+    color: inherit;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    text-align: right;
+    transition: background 0.2s;
+  }
+
+  .settings-item:hover {
+    background: var(--gray-100);
+  }
+
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal.hidden {
+    display: none !important;
+  }
+
+  .modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-content {
+    background: white;
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-xl);
+    width: 90%;
+    max-width: 450px;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-6);
+    border-bottom: 1px solid var(--gray-200);
+  }
+
+  #edit-modal-body,
+  #password-modal-body {
+    padding: var(--space-6);
+  }
+
+  @media (max-width: 768px) {
+    .info-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}

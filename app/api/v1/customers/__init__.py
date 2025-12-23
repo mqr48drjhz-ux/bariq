@@ -41,6 +41,44 @@ def update_profile():
     return jsonify(result)
 
 
+@customers_bp.route('/me/password', methods=['PUT'])
+@jwt_required()
+def change_password():
+    """Change customer password"""
+    from app.services.customer_service import CustomerService
+
+    identity = current_user
+    data = request.get_json()
+
+    if not data:
+        return jsonify({
+            'success': False,
+            'message': 'Request body is required',
+            'error_code': 'VAL_001'
+        }), 400
+
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+
+    if not current_password or not new_password:
+        return jsonify({
+            'success': False,
+            'message': 'Current password and new password are required',
+            'error_code': 'VAL_001'
+        }), 400
+
+    result = CustomerService.change_password(
+        identity['id'],
+        current_password,
+        new_password
+    )
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    return jsonify(result)
+
+
 # ==================== Credit ====================
 
 @customers_bp.route('/me/credit', methods=['GET'])
@@ -129,6 +167,27 @@ def confirm_transaction(transaction_id):
     result = TransactionService.confirm_transaction(
         identity['id'],
         transaction_id
+    )
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    return jsonify(result)
+
+
+@customers_bp.route('/me/transactions/<transaction_id>/reject', methods=['POST'])
+@jwt_required()
+def reject_transaction(transaction_id):
+    """Reject a pending transaction"""
+    from app.services.transaction_service import TransactionService
+
+    identity = current_user
+    data = request.get_json() or {}
+
+    result = TransactionService.reject_transaction(
+        identity['id'],
+        transaction_id,
+        reason=data.get('reason')
     )
 
     if not result['success']:

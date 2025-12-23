@@ -1,0 +1,390 @@
+{% extends "merchant/layout.html" %}
+
+{% block title %}معاملة جديدة - التاجر{% endblock %}
+
+{% block page_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 style="font-size: 1.5rem; margin: 0;">إنشاء معاملة جديدة</h2>
+    </div>
+
+    <div id="error-message" class="alert alert-error hidden"></div>
+    <div id="success-message" class="alert alert-success hidden"></div>
+
+    <form onsubmit="createTransaction(event)">
+        <!-- Customer Lookup -->
+        <div class="form-group">
+            <label class="form-label">رقم بريق العميل</label>
+            <div style="display: flex; gap: var(--space-2);">
+                <input type="text" id="bariq-id" class="form-input" dir="ltr" placeholder="123456" required
+                    style="flex: 1;">
+                <button type="button" class="btn btn-secondary" onclick="lookupCustomer()">بحث</button>
+            </div>
+        </div>
+
+        <!-- Customer Info Card -->
+        <div id="customer-info" class="hidden card mb-6"
+            style="background: var(--teal-50); border-color: var(--teal-200);">
+            <div class="flex items-center gap-4">
+                <div style="font-size: 2.5rem;">👤</div>
+                <div style="flex: 1;">
+                    <p class="text-sm text-muted">العميل</p>
+                    <p id="customer-name" class="font-bold text-lg"></p>
+                </div>
+                <div style="text-align: left; direction: ltr;">
+                    <p class="text-sm text-muted">النقاط المتاحة</p>
+                    <p id="customer-credit" class="font-bold text-lg text-primary"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Products Section -->
+        <div class="card mb-6" style="background: var(--gray-50);">
+            <div class="flex items-center justify-between mb-4">
+                <h3 style="margin: 0;">المنتجات</h3>
+                <button type="button" class="btn btn-primary btn-sm" onclick="addProductRow()">➕ إضافة منتج</button>
+            </div>
+
+            <div id="products-container">
+                <!-- Product rows will be added here -->
+            </div>
+
+            <div id="no-products" class="text-center p-4 text-muted">
+                <p>لم يتم إضافة منتجات بعد</p>
+                <button type="button" class="btn btn-primary mt-2" onclick="addProductRow()">➕ إضافة منتج</button>
+            </div>
+        </div>
+
+        <!-- Totals Section -->
+        <div class="card mb-6" style="background: linear-gradient(135deg, var(--teal-50), white);">
+            <div class="grid grid-2" style="gap: var(--space-4);">
+                <div>
+                    <label class="form-label">الخصم (اختياري)</label>
+                    <input type="number" id="discount" class="form-input" dir="ltr" placeholder="0" min="0" step="0.01"
+                        value="0" onchange="calculateTotals()">
+                </div>
+                <div>
+                    <label class="form-label">مدة السداد (أيام)</label>
+                    <input type="number" id="payment-days" class="form-input" dir="ltr" placeholder="30" min="1"
+                        max="90" value="30">
+                </div>
+            </div>
+
+            <hr style="margin: var(--space-4) 0; border-color: var(--teal-200);">
+
+            <div class="grid grid-3">
+                <div>
+                    <p class="text-sm text-muted">المجموع الفرعي</p>
+                    <p id="subtotal" class="font-bold text-xl">0 نقطة</p>
+                </div>
+                <div>
+                    <p class="text-sm text-muted">الخصم</p>
+                    <p id="discount-display" class="font-bold text-xl text-danger">0 نقطة</p>
+                </div>
+                <div>
+                    <p class="text-sm text-muted">الإجمالي</p>
+                    <p id="total" class="font-bold text-2xl text-primary">0 نقطة</p>
+                </div>
+            </div>
+
+            <!-- Credit Check Warning -->
+            <div id="credit-warning" class="hidden alert alert-warning mt-4">
+                ⚠️ المبلغ المطلوب يتجاوز نقاط العميل المتاحة
+            </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="form-group">
+            <label class="form-label">ملاحظات (اختياري)</label>
+            <textarea id="notes" class="form-input" rows="2" placeholder="تفاصيل إضافية عن المعاملة..."></textarea>
+        </div>
+
+        <button type="submit" id="submit-btn" class="btn btn-primary btn-lg btn-block" disabled>
+            إنشاء المعاملة
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+    let selectedCustomer = null;
+    let productCount = 0;
+
+    // Lookup customer by Bariq ID
+    async function lookupCustomer() {
+        const bariqId = document.getElementById('bariq-id').value.trim();
+        const customerInfo = document.getElementById('customer-info');
+        const errorMsg = document.getElementById('error-message');
+
+        if (!bariqId) {
+            errorMsg.textContent = 'الرجاء إدخال رقم بريق';
+            errorMsg.classList.remove('hidden');
+            return;
+        }
+
+        errorMsg.classList.add('hidden');
+
+        try {
+            const result = await API.merchant.lookupCustomer(bariqId);
+
+            if (result.success && result.data.success) {
+                const customer = result.data.data;
+                selectedCustomer = customer;
+
+                document.getElementById('customer-name').textContent = customer.full_name_ar || customer.username;
+                document.getElementById('customer-credit').textContent = `${formatNumber(customer.available_credit)} نقطة`;
+                customerInfo.classList.remove('hidden');
+
+                // Enable submit button
+                updateSubmitButton();
+
+                // Recalculate to check credit
+                calculateTotals();
+            } else {
+                errorMsg.textContent = result.data?.message || 'العميل غير موجود';
+                errorMsg.classList.remove('hidden');
+                customerInfo.classList.add('hidden');
+                selectedCustomer = null;
+                updateSubmitButton();
+            }
+        } catch (error) {
+            errorMsg.textContent = 'حدث خطأ أثناء البحث';
+            errorMsg.classList.remove('hidden');
+            customerInfo.classList.add('hidden');
+            selectedCustomer = null;
+            updateSubmitButton();
+        }
+    }
+
+    // Add a product row
+    function addProductRow() {
+        productCount++;
+        const container = document.getElementById('products-container');
+        const noProducts = document.getElementById('no-products');
+
+        noProducts.classList.add('hidden');
+
+        const row = document.createElement('div');
+        row.className = 'product-row';
+        row.id = `product-row-${productCount}`;
+        row.innerHTML = `
+      <div class="grid" style="grid-template-columns: 2fr 1fr 1fr auto; gap: var(--space-3); align-items: end; margin-bottom: var(--space-3);">
+        <div>
+          <label class="form-label text-sm">اسم المنتج</label>
+          <input type="text" class="form-input product-name" placeholder="مثال: هاتف سامسونج" required>
+        </div>
+        <div>
+          <label class="form-label text-sm">السعر (نقطة)</label>
+          <input type="number" class="form-input product-price" dir="ltr" placeholder="0" min="0" step="0.01" required onchange="calculateTotals()">
+        </div>
+        <div>
+          <label class="form-label text-sm">الكمية</label>
+          <input type="number" class="form-input product-qty" dir="ltr" value="1" min="1" required onchange="calculateTotals()">
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeProductRow(${productCount})" style="margin-bottom: 3px;">🗑</button>
+      </div>
+    `;
+
+        container.appendChild(row);
+        calculateTotals();
+    }
+
+    // Remove a product row
+    function removeProductRow(id) {
+        const row = document.getElementById(`product-row-${id}`);
+        if (row) {
+            row.remove();
+            calculateTotals();
+
+            // Show "no products" if empty
+            const container = document.getElementById('products-container');
+            if (container.children.length === 0) {
+                document.getElementById('no-products').classList.remove('hidden');
+            }
+        }
+    }
+
+    // Calculate totals
+    function calculateTotals() {
+        const rows = document.querySelectorAll('.product-row');
+        let subtotal = 0;
+
+        rows.forEach(row => {
+            const price = parseFloat(row.querySelector('.product-price').value) || 0;
+            const qty = parseInt(row.querySelector('.product-qty').value) || 1;
+            subtotal += price * qty;
+        });
+
+        const discount = parseFloat(document.getElementById('discount').value) || 0;
+        const total = Math.max(0, subtotal - discount);
+
+        document.getElementById('subtotal').textContent = `${formatNumber(subtotal)} نقطة`;
+        document.getElementById('discount-display').textContent = `${formatNumber(discount)} نقطة`;
+        document.getElementById('total').textContent = `${formatNumber(total)} نقطة`;
+
+        // Check credit
+        const creditWarning = document.getElementById('credit-warning');
+        if (selectedCustomer && total > parseFloat(selectedCustomer.available_credit)) {
+            creditWarning.classList.remove('hidden');
+        } else {
+            creditWarning.classList.add('hidden');
+        }
+
+        updateSubmitButton();
+    }
+
+    // Update submit button state
+    function updateSubmitButton() {
+        const btn = document.getElementById('submit-btn');
+        const rows = document.querySelectorAll('.product-row');
+        const total = getTotalAmount();
+
+        const hasCustomer = selectedCustomer !== null;
+        const hasProducts = rows.length > 0;
+        const hasCredit = selectedCustomer ? total <= parseFloat(selectedCustomer.available_credit) : false;
+        const validAmount = total > 0;
+
+        btn.disabled = !(hasCustomer && hasProducts && hasCredit && validAmount);
+    }
+
+    // Get total amount
+    function getTotalAmount() {
+        const rows = document.querySelectorAll('.product-row');
+        let subtotal = 0;
+        rows.forEach(row => {
+            const price = parseFloat(row.querySelector('.product-price').value) || 0;
+            const qty = parseInt(row.querySelector('.product-qty').value) || 1;
+            subtotal += price * qty;
+        });
+        const discount = parseFloat(document.getElementById('discount').value) || 0;
+        return Math.max(0, subtotal - discount);
+    }
+
+    // Create transaction
+    async function createTransaction(event) {
+        event.preventDefault();
+
+        const bariqId = document.getElementById('bariq-id').value.trim();
+        const discount = parseFloat(document.getElementById('discount').value) || 0;
+        const paymentDays = parseInt(document.getElementById('payment-days').value) || 30;
+        const notes = document.getElementById('notes').value;
+        const submitBtn = document.getElementById('submit-btn');
+        const errorMsg = document.getElementById('error-message');
+        const successMsg = document.getElementById('success-message');
+
+        errorMsg.classList.add('hidden');
+        successMsg.classList.add('hidden');
+
+        // Collect items
+        const items = [];
+        const rows = document.querySelectorAll('.product-row');
+
+        rows.forEach(row => {
+            const name = row.querySelector('.product-name').value.trim();
+            const price = parseFloat(row.querySelector('.product-price').value) || 0;
+            const qty = parseInt(row.querySelector('.product-qty').value) || 1;
+
+            if (name && price > 0) {
+                items.push({
+                    name: name,
+                    unit_price: price,
+                    quantity: qty
+                });
+            }
+        });
+
+        if (items.length === 0) {
+            errorMsg.textContent = 'الرجاء إضافة منتج واحد على الأقل';
+            errorMsg.classList.remove('hidden');
+            return;
+        }
+
+        if (!selectedCustomer) {
+            errorMsg.textContent = 'الرجاء البحث عن العميل أولاً';
+            errorMsg.classList.remove('hidden');
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'جاري الإنشاء...';
+
+        try {
+            const result = await API.merchant.createTransaction({
+                customer_bariq_id: bariqId,
+                items: items,
+                discount: discount,
+                payment_term_days: paymentDays,
+                notes: notes
+            });
+
+            if (result.success && result.data.success) {
+                const txn = result.data.data.transaction;
+                successMsg.innerHTML = `
+          <div class="flex items-center justify-between">
+            <div>
+              <strong>✅ تم إنشاء المعاملة بنجاح!</strong><br>
+              <span class="text-sm">رقم المرجع: <span dir="ltr">${txn.reference_number}</span></span><br>
+              <span class="text-sm">الإجمالي: ${formatNumber(txn.total_amount)} نقطة</span>
+            </div>
+            <div>
+              <a href="/merchant/transactions" class="btn btn-primary btn-sm">عرض المعاملات</a>
+            </div>
+          </div>
+        `;
+                successMsg.classList.remove('hidden');
+
+                // Reset form
+                resetForm();
+            } else {
+                errorMsg.textContent = result.data?.message || 'فشل إنشاء المعاملة';
+                errorMsg.classList.remove('hidden');
+            }
+        } catch (error) {
+            console.error('Create transaction error:', error);
+            errorMsg.textContent = 'حدث خطأ أثناء إنشاء المعاملة';
+            errorMsg.classList.remove('hidden');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'إنشاء المعاملة';
+            updateSubmitButton();
+        }
+    }
+
+    // Reset form
+    function resetForm() {
+        document.getElementById('bariq-id').value = '';
+        document.getElementById('discount').value = '0';
+        document.getElementById('payment-days').value = '30';
+        document.getElementById('notes').value = '';
+        document.getElementById('products-container').innerHTML = '';
+        document.getElementById('no-products').classList.remove('hidden');
+        document.getElementById('customer-info').classList.add('hidden');
+        selectedCustomer = null;
+        productCount = 0;
+        calculateTotals();
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        // Add first product row
+        addProductRow();
+    });
+</script>
+
+<style>
+    .product-row {
+        background: white;
+        border-radius: var(--radius-lg);
+        padding: var(--space-4);
+        border: 1px solid var(--gray-200);
+    }
+
+    @media (max-width: 768px) {
+        .product-row .grid {
+            grid-template-columns: 1fr !important;
+        }
+    }
+</style>
+{% endblock %}

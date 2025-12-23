@@ -1,0 +1,112 @@
+{% extends "customer/layout.html" %}
+
+{% block title %}حد الشراء - بريق اليسر{% endblock %}
+
+{% block page_content %}
+<div id="credit-content">
+    <div class="loading-container">
+        <div class="spinner"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+    async function loadCreditPage() {
+        const container = document.getElementById('credit-content');
+
+        try {
+            const result = await API.customer.getCredit();
+            const credit = result.data?.data || {};
+
+            container.innerHTML = `
+        <div class="grid grid-3 mb-6">
+          <div class="stat-card green">
+            <div class="stat-card-header">
+              <span>النقاط المتاحة</span>
+              <span style="font-size: 2rem;">💳</span>
+            </div>
+            <div class="stat-card-value">${formatNumber(credit.available_credit || 0)}</div>
+            <div class="stat-card-label">نقطة</div>
+          </div>
+          
+          <div class="stat-card gold">
+            <div class="stat-card-header">
+              <span>النقاط المستخدمة</span>
+              <span style="font-size: 2rem;">📊</span>
+            </div>
+            <div class="stat-card-value">${formatNumber(credit.used_credit || 0)}</div>
+            <div class="stat-card-label">نقطة</div>
+          </div>
+          
+          <div class="stat-card dark">
+            <div class="stat-card-header">
+              <span>حد النقاط الكلي</span>
+              <span style="font-size: 2rem;">🎯</span>
+            </div>
+            <div class="stat-card-value">${formatNumber(credit.credit_limit || 0)}</div>
+            <div class="stat-card-label">نقطة</div>
+          </div>
+        </div>
+        
+        <div class="card mb-6">
+          <h3>استخدام النقاط</h3>
+          <div style="background: var(--gray-100); border-radius: var(--radius-lg); height: 24px; margin-bottom: var(--space-4);">
+            <div style="background: linear-gradient(135deg, var(--primary-500), var(--primary-600)); height: 100%; border-radius: var(--radius-lg); width: ${Math.round((credit.used_credit || 0) / (credit.credit_limit || 1) * 100)}%;"></div>
+          </div>
+          <div class="flex justify-between text-sm text-muted">
+            <span>مستخدم: ${formatNumber(credit.used_credit || 0)} نقطة</span>
+            <span>متاح: ${formatNumber(credit.available_credit || 0)} نقطة</span>
+          </div>
+        </div>
+        
+        <div class="card">
+          <h3>طلب زيادة الحد</h3>
+          <p class="text-muted mb-4">يمكنك طلب زيادة حد النقاط الخاص بك. سيتم مراجعة طلبك والرد عليك خلال 24 ساعة.</p>
+          <form onsubmit="requestCreditIncrease(event)">
+            <div class="form-group">
+              <label class="form-label">المبلغ المطلوب (نقطة)</label>
+              <input type="number" id="requested-amount" class="form-input" dir="ltr" placeholder="مثال: 5000" required min="100">
+            </div>
+            <div class="form-group">
+              <label class="form-label">سبب الطلب</label>
+              <textarea id="request-reason" class="form-input" rows="3" placeholder="اشرح لماذا تحتاج زيادة الحد..."></textarea>
+            </div>
+            <button type="submit" id="submit-btn" class="btn btn-primary">
+              إرسال الطلب
+            </button>
+          </form>
+        </div>
+      `;
+
+        } catch (error) {
+            console.error('Error loading credit:', error);
+            showError(container, 'حدث خطأ في تحميل البيانات');
+        }
+    }
+
+    async function requestCreditIncrease(event) {
+        event.preventDefault();
+        const amount = document.getElementById('requested-amount').value;
+        const reason = document.getElementById('request-reason').value;
+        const btn = document.getElementById('submit-btn');
+
+        btn.disabled = true;
+        btn.textContent = 'جاري الإرسال...';
+
+        try {
+            const result = await API.customer.getCredit(); // TODO: Call actual request credit API
+            alert('تم إرسال طلبك بنجاح. سنراجعه ونرد عليك قريباً.');
+            loadCreditPage();
+        } catch (error) {
+            alert('حدث خطأ أثناء إرسال الطلب');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'إرسال الطلب';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadCreditPage);
+</script>
+{% endblock %}

@@ -1,0 +1,117 @@
+{% extends "customer/layout.html" %}
+
+{% block title %}المدفوعات - بريق اليسر{% endblock %}
+
+{% block page_content %}
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 style="font-size: 1.5rem; margin: 0;">ملخص المستحقات</h2>
+    </div>
+    <div id="debt-summary">
+        <div class="loading-container" style="min-height: 100px;">
+            <div class="spinner"></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 style="font-size: 1.5rem; margin: 0;">سجل المدفوعات</h2>
+    </div>
+    <div id="payments-content">
+        <div class="loading-container">
+            <div class="spinner"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+    async function loadPaymentsPage() {
+        const debtContainer = document.getElementById('debt-summary');
+        const paymentsContainer = document.getElementById('payments-content');
+
+        try {
+            const [debtRes, paymentsRes] = await Promise.all([
+                API.customer.getDebt(),
+                API.customer.getPayments({ per_page: 50 }),
+            ]);
+
+            const debt = debtRes.data?.data || {};
+            const payments = paymentsRes.data?.data?.payments || [];
+
+            // Debt summary
+            debtContainer.innerHTML = `
+        <div class="grid grid-3">
+          <div class="stat-card ${debt.overdue_amount > 0 ? '' : 'green'}" style="${debt.overdue_amount > 0 ? 'background: linear-gradient(135deg, #ef4444, #dc2626);' : ''}">
+            <div class="stat-card-header">
+              <span>إجمالي المستحقات</span>
+            </div>
+            <div class="stat-card-value">${formatNumber(debt.total_debt || 0)}</div>
+            <div class="stat-card-label">نقطة</div>
+          </div>
+          
+          <div class="stat-card gold">
+            <div class="stat-card-header">
+              <span>مستحقات متأخرة</span>
+            </div>
+            <div class="stat-card-value">${formatNumber(debt.overdue_amount || 0)}</div>
+            <div class="stat-card-label">نقطة</div>
+          </div>
+          
+          <div class="stat-card blue">
+            <div class="stat-card-header">
+              <span>معاملات غير مسددة</span>
+            </div>
+            <div class="stat-card-value">${debt.pending_transactions || 0}</div>
+            <div class="stat-card-label">معاملة</div>
+          </div>
+        </div>
+      `;
+
+            // Payments list
+            if (payments.length === 0) {
+                paymentsContainer.innerHTML = `
+          <div class="text-center p-6 text-muted">
+            <span style="font-size: 3rem;">💰</span>
+            <p class="mt-4">لا توجد مدفوعات حتى الآن</p>
+          </div>
+        `;
+            } else {
+                paymentsContainer.innerHTML = `
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>المبلغ</th>
+                  <th>طريقة الدفع</th>
+                  <th>الحالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${payments.map(payment => `
+                  <tr>
+                    <td>${formatDateTime(payment.payment_date)}</td>
+                    <td class="font-bold">${formatNumber(payment.amount)} نقطة</td>
+                    <td>${payment.payment_method || '-'}</td>
+                    <td><span class="badge ${getStatusBadgeClass(payment.status)}">${getStatusLabel(payment.status)}</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+            }
+
+        } catch (error) {
+            console.error('Error loading payments:', error);
+            showError(debtContainer, 'حدث خطأ في تحميل البيانات');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadPaymentsPage);
+</script>
+{% endblock %}

@@ -1,0 +1,362 @@
+{% extends "merchant/layout.html" %}
+
+{% block title %}التسويات - التاجر{% endblock %}
+
+{% block page_content %}
+<!-- Summary Cards -->
+<div class="grid grid-3 mb-6" id="summary-cards">
+  <div class="card text-center">
+    <p class="text-sm text-muted">إجمالي التسويات</p>
+    <p class="text-2xl font-bold text-primary" id="total-settlements">0</p>
+  </div>
+  <div class="card text-center">
+    <p class="text-sm text-muted">المبلغ المحول</p>
+    <p class="text-2xl font-bold text-success" id="transferred-amount">0 ريال</p>
+  </div>
+  <div class="card text-center">
+    <p class="text-sm text-muted">في انتظار التحويل</p>
+    <p class="text-2xl font-bold text-warning" id="pending-amount">0 ريال</p>
+  </div>
+</div>
+
+<!-- Settlements List -->
+<div class="card">
+  <div class="card-header">
+    <h2 style="font-size: 1.5rem; margin: 0;">سجل التسويات</h2>
+    <!-- Status Filter -->
+    <div class="tabs" style="margin: 0; padding: 0; background: none; border: none; width: auto; gap: var(--space-2);">
+      <button class="tab active" data-status="">الكل</button>
+      <button class="tab" data-status="pending">قيد المراجعة</button>
+      <button class="tab" data-status="approved">معتمدة</button>
+      <button class="tab" data-status="transferred">محولة</button>
+    </div>
+  </div>
+
+  <div id="settlements-content">
+    <div class="loading-container">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Settlement Details Modal -->
+<div id="settlement-modal" class="modal hidden">
+  <div class="modal-overlay" onclick="closeModal()"></div>
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header">
+      <h3 style="margin: 0;">تفاصيل التسوية</h3>
+      <button onclick="closeModal()" class="btn btn-secondary btn-sm">✕</button>
+    </div>
+    <div id="modal-body">
+      <div class="loading-container">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+  let currentFilter = '';
+  let allSettlements = [];
+
+  async function loadSettlements(status = '') {
+    const container = document.getElementById('settlements-content');
+    currentFilter = status;
+
+    try {
+      const params = { per_page: 100 };
+      if (status) params.status = status;
+
+      const result = await API.merchant.getSettlements(params);
+      console.log('Settlements API result:', result);
+
+      // Safely extract settlements array
+      let settlements = [];
+      if (result.success && result.data?.data?.settlements && Array.isArray(result.data.data.settlements)) {
+        settlements = result.data.data.settlements;
+      } else if (result.success && Array.isArray(result.data?.data)) {
+        settlements = result.data.data;
+      }
+
+      allSettlements = settlements;
+      updateSummary(settlements);
+
+      if (settlements.length === 0) {
+        container.innerHTML = `
+          <div class="text-center p-6 text-muted">
+            <span style="font-size: 3rem;">💰</span>
+            <p class="mt-4">لا توجد تسويات ${status ? 'بهذه الحالة' : 'حتى الآن'}</p>
+            <p class="text-sm">سيتم إنشاء التسويات تلقائياً عند اكتمال المعاملات</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>رقم التسوية</th>
+                <th>الفترة</th>
+                <th>المعاملات</th>
+                <th>إجمالي المبيعات</th>
+                <th>العمولة</th>
+                <th>صافي المبلغ</th>
+                <th>الحالة</th>
+                <th>الإجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${settlements.map(s => `
+                <tr>
+                  <td style="direction: ltr; font-family: monospace;">${s.reference_number || s.id?.slice(0, 8) || '-'}</td>
+                  <td>${formatDate(s.period_start)} - ${formatDate(s.period_end)}</td>
+                  <td>${s.transaction_count || 0}</td>
+                  <td class="font-bold">${formatNumber(s.gross_amount || s.total_amount || 0)} ريال</td>
+                  <td class="text-danger">-${formatNumber(s.commission_amount || 0)} ريال</td>
+                  <td class="font-bold text-success">${formatNumber(s.net_amount || 0)} ريال</td>
+                  <td><span class="badge ${getSettlementBadgeClass(s.status)}">${getSettlementLabel(s.status)}</span></td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm" onclick="viewSettlement('${s.id}')">عرض</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+    } catch (error) {
+      console.error('Error loading settlements:', error);
+      showError(container, 'حدث خطأ في تحميل التسويات');
+    }
+  }
+
+  function updateSummary(settlements) {
+    const total = settlements.length;
+    const transferred = settlements.filter(s => s.status === 'transferred');
+    const pending = settlements.filter(s => s.status === 'pending' || s.status === 'approved');
+
+    const transferredAmount = transferred.reduce((sum, s) => sum + (s.net_amount || 0), 0);
+    const pendingAmount = pending.reduce((sum, s) => sum + (s.net_amount || 0), 0);
+
+    document.getElementById('total-settlements').textContent = total;
+    document.getElementById('transferred-amount').textContent = formatNumber(transferredAmount) + ' ريال';
+    document.getElementById('pending-amount').textContent = formatNumber(pendingAmount) + ' ريال';
+  }
+
+  async function viewSettlement(id) {
+    const modal = document.getElementById('settlement-modal');
+    const body = document.getElementById('modal-body');
+
+    modal.classList.remove('hidden');
+    body.innerHTML = '<div class="loading-container"><div class="spinner"></div></div>';
+
+    try {
+      // Find settlement from loaded data first
+      let settlement = allSettlements.find(s => s.id === id);
+
+      // If not found, try API (for detailed view)
+      if (!settlement) {
+        const result = await API.merchant.getSettlementDetails(id);
+        if (result.success && result.data?.data?.settlement) {
+          settlement = result.data.data.settlement;
+        }
+      }
+
+      if (!settlement) {
+        body.innerHTML = '<div class="alert alert-error">التسوية غير موجودة</div>';
+        return;
+      }
+
+      body.innerHTML = `
+        <div class="settlement-details">
+          <div class="mb-4 p-4" style="background: var(--gray-50); border-radius: var(--radius-lg);">
+            <p class="text-sm text-muted">رقم التسوية</p>
+            <p class="font-bold" style="direction: ltr; font-family: monospace;">${settlement.reference_number || settlement.id}</p>
+          </div>
+
+          <div class="grid grid-2 mb-4">
+            <div>
+              <p class="text-sm text-muted">من تاريخ</p>
+              <p class="font-bold">${formatDate(settlement.period_start)}</p>
+            </div>
+            <div>
+              <p class="text-sm text-muted">إلى تاريخ</p>
+              <p class="font-bold">${formatDate(settlement.period_end)}</p>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <p class="text-sm text-muted mb-2">تفاصيل المبالغ</p>
+            <div style="background: var(--gray-50); border-radius: var(--radius-lg); padding: var(--space-4);">
+              <div class="flex justify-between mb-2">
+                <span>إجمالي المبيعات</span>
+                <span class="font-bold">${formatNumber(settlement.gross_amount || settlement.total_amount || 0)} ريال</span>
+              </div>
+              <div class="flex justify-between mb-2 text-danger">
+                <span>المرتجعات</span>
+                <span>-${formatNumber(settlement.returns_amount || 0)} ريال</span>
+              </div>
+              <div class="flex justify-between mb-2 text-danger">
+                <span>العمولة</span>
+                <span>-${formatNumber(settlement.commission_amount || 0)} ريال</span>
+              </div>
+              <hr style="margin: var(--space-3) 0; border-color: var(--gray-300);">
+              <div class="flex justify-between">
+                <span class="font-bold">صافي المبلغ</span>
+                <span class="font-bold text-success text-lg">${formatNumber(settlement.net_amount || 0)} ريال</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-2 mb-4">
+            <div>
+              <p class="text-sm text-muted">عدد المعاملات</p>
+              <p class="font-bold">${settlement.transaction_count || 0}</p>
+            </div>
+            <div>
+              <p class="text-sm text-muted">عدد المرتجعات</p>
+              <p class="font-bold">${settlement.return_count || 0}</p>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <p class="text-sm text-muted">الحالة</p>
+            <span class="badge ${getSettlementBadgeClass(settlement.status)}">${getSettlementLabel(settlement.status)}</span>
+          </div>
+
+          ${settlement.status === 'transferred' ? `
+            <div class="p-4" style="background: var(--emerald-50); border-radius: var(--radius-lg); border: 1px solid var(--emerald-200);">
+              <p class="text-sm" style="color: var(--emerald-600);">تم التحويل بتاريخ</p>
+              <p class="font-bold" style="color: var(--emerald-700);">${formatDate(settlement.transferred_at)}</p>
+              ${settlement.transfer_reference ? `
+                <p class="text-sm mt-2" style="color: var(--emerald-600);">رقم مرجع التحويل</p>
+                <p class="font-bold" style="color: var(--emerald-700); direction: ltr;">${settlement.transfer_reference}</p>
+              ` : ''}
+            </div>
+          ` : ''}
+
+          ${settlement.status === 'pending' ? `
+            <div class="p-4" style="background: var(--amber-50); border-radius: var(--radius-lg); border: 1px solid var(--amber-200);">
+              <p style="color: var(--amber-700);">⏳ هذه التسوية قيد المراجعة وسيتم تحويلها قريباً</p>
+            </div>
+          ` : ''}
+
+          ${settlement.status === 'approved' ? `
+            <div class="p-4" style="background: var(--sky-50); border-radius: var(--radius-lg); border: 1px solid var(--sky-200);">
+              <p style="color: var(--sky-700);">✓ تم اعتماد التسوية وفي انتظار التحويل</p>
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+    } catch (error) {
+      console.error('Error loading settlement details:', error);
+      body.innerHTML = '<div class="alert alert-error">حدث خطأ في تحميل تفاصيل التسوية</div>';
+    }
+  }
+
+  function closeModal() {
+    document.getElementById('settlement-modal').classList.add('hidden');
+  }
+
+  // Settlement-specific status labels
+  function getSettlementLabel(status) {
+    const labels = {
+      'open': 'مفتوحة',
+      'pending': 'قيد المراجعة',
+      'approved': 'معتمدة',
+      'transferred': 'محولة',
+      'rejected': 'مرفوضة'
+    };
+    return labels[status] || status;
+  }
+
+  function getSettlementBadgeClass(status) {
+    const classes = {
+      'open': 'badge-info',
+      'pending': 'badge-warning',
+      'approved': 'badge-info',
+      'transferred': 'badge-success',
+      'rejected': 'badge-danger'
+    };
+    return classes[status] || 'badge-secondary';
+  }
+
+  // Filter tabs
+  document.querySelectorAll('.tab[data-status]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab[data-status]').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      loadSettlements(tab.dataset.status);
+    });
+  });
+
+  document.addEventListener('DOMContentLoaded', () => loadSettlements());
+</script>
+
+<style>
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal.hidden {
+    display: none !important;
+  }
+
+  .modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-content {
+    background: white;
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-xl);
+    width: 90%;
+    max-width: 500px;
+    max-height: 85vh;
+    overflow-y: auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-6);
+    border-bottom: 1px solid var(--gray-200);
+  }
+
+  #modal-body {
+    padding: var(--space-6);
+  }
+
+  .settlement-details hr {
+    border: none;
+    border-top: 1px dashed var(--gray-300);
+  }
+
+  .text-2xl {
+    font-size: 1.75rem;
+  }
+</style>
+{% endblock %}

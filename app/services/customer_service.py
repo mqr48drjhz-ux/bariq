@@ -487,6 +487,53 @@ class CustomerService:
         except Exception:
             pass  # Don't fail the main operation if notification fails
 
+    # ==================== Password Management ====================
+
+    @staticmethod
+    def change_password(customer_id, current_password, new_password):
+        """Change customer password"""
+        customer = Customer.query.get(customer_id)
+
+        if not customer:
+            return {
+                'success': False,
+                'message': 'Customer not found',
+                'error_code': 'CUST_001'
+            }
+
+        # Verify current password
+        if not customer.check_password(current_password):
+            return {
+                'success': False,
+                'message': 'Current password is incorrect',
+                'error_code': 'AUTH_003'
+            }
+
+        # Validate new password
+        if len(new_password) < 8:
+            return {
+                'success': False,
+                'message': 'New password must be at least 8 characters',
+                'error_code': 'VAL_001'
+            }
+
+        try:
+            customer.set_password(new_password)
+            customer.updated_at = datetime.utcnow()
+            db.session.commit()
+
+            return {
+                'success': True,
+                'message': 'Password changed successfully'
+            }
+        except Exception as e:
+            db.session.rollback()
+            return {
+                'success': False,
+                'message': f'Failed to change password: {str(e)}',
+                'error_code': 'SYS_001'
+            }
+
     # ==================== Search & List ====================
 
     @staticmethod

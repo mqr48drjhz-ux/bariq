@@ -1,0 +1,210 @@
+{% extends "customer/layout.html" %}
+
+{% block title %}لوحة التحكم - بريق اليسر{% endblock %}
+
+{% block page_content %}
+<div id="dashboard-content">
+  <div class="loading-container">
+    <div class="spinner"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+  async function loadDashboard() {
+    const container = document.getElementById('dashboard-content');
+    const user = TokenManager.getUser();
+
+    try {
+      // Load data in parallel
+      const [creditRes, transactionsRes, debtRes] = await Promise.all([
+        API.customer.getCredit(),
+        API.customer.getTransactions({ per_page: 5 }),
+        API.customer.getDebt(),
+      ]);
+
+      const credit = creditRes.data?.data || {};
+      const transactions = transactionsRes.data?.data?.transactions || [];
+      const debt = debtRes.data?.data || {};
+      const pendingTransactions = transactions.filter(t => t.status === 'pending');
+
+      container.innerHTML = `
+        <!-- Welcome Banner -->
+        <div class="welcome-banner">
+          <h1>مرحباً، ${user?.full_name_ar || 'عميلنا العزيز'}</h1>
+          <p>إدارة مشترياتك ومدفوعاتك</p>
+        </div>
+        
+        <!-- Credit Cards -->
+        <div class="grid grid-3 mb-6">
+          <div class="stat-card green">
+            <div class="stat-card-header">
+              <span>النقاط المتاحة</span>
+              <span style="font-size: 2rem;">💳</span>
+            </div>
+            <div class="stat-card-value">${formatNumber(credit.available_credit || 0)}</div>
+            <div class="stat-card-label">نقطة (1 نقطة = 1 ريال)</div>
+          </div>
+          
+          <div class="stat-card gold">
+            <div class="stat-card-header">
+              <span>النقاط المستخدمة</span>
+              <span style="font-size: 2rem;">📊</span>
+            </div>
+            <div class="stat-card-value">${formatNumber(credit.used_credit || 0)}</div>
+            <div class="stat-card-label">نقطة</div>
+          </div>
+          
+          <div class="stat-card dark">
+            <div class="stat-card-header">
+              <span>حد النقاط</span>
+              <span style="font-size: 2rem;">🎯</span>
+            </div>
+            <div class="stat-card-value">${formatNumber(credit.credit_limit || 0)}</div>
+            <div class="stat-card-label">نقطة</div>
+          </div>
+        </div>
+        
+        <!-- Bariq ID Card -->
+        <div class="bariq-id-card mb-6">
+          <div>
+            <p class="text-muted text-sm">رقم بريق الخاص بك</p>
+            <p class="bariq-id-value">${user?.bariq_id || '------'}</p>
+            <p class="text-muted text-sm mt-2">استخدم هذا الرقم عند الشراء من المتاجر</p>
+          </div>
+          <div style="font-size: 3rem;">🆔</div>
+        </div>
+        
+        ${pendingTransactions.length > 0 ? `
+        <!-- Pending Transactions Alert -->
+        <div class="pending-alert">
+          <div class="pending-alert-header">
+            <span style="font-size: 2rem;">⚠️</span>
+            <div>
+              <div class="pending-alert-title">معاملات تحتاج تأكيدك</div>
+              <div class="pending-alert-subtitle">لديك ${pendingTransactions.length} معاملة بانتظار الموافقة</div>
+            </div>
+          </div>
+          ${pendingTransactions.map(txn => `
+            <div class="pending-item">
+              <div>
+                <p class="font-bold">${txn.merchant?.name_ar || 'متجر'}</p>
+                <p class="text-muted text-sm">${txn.branch?.name_ar || ''} - ${formatDate(txn.transaction_date)}</p>
+                <p class="text-primary font-bold mt-2">${formatNumber(txn.total_amount)} نقطة</p>
+              </div>
+              <button class="btn btn-primary" onclick="confirmTransaction('${txn.id}', this)">تأكيد ✓</button>
+            </div>
+          `).join('')}
+        </div>
+        ` : ''}
+        
+        ${debt.total_debt > 0 ? `
+        <!-- Debt Alert -->
+        <div class="card mb-6" style="background: ${debt.overdue_amount > 0 ? '#fef2f2' : '#fffbeb'}; border: 1px solid ${debt.overdue_amount > 0 ? '#fecaca' : '#fde68a'};">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 style="color: ${debt.overdue_amount > 0 ? '#991b1b' : '#92400e'}; font-weight: 700;">
+                ${debt.overdue_amount > 0 ? 'لديك مستحقات متأخرة!' : 'لديك مستحقات قادمة'}
+              </h3>
+              <p style="color: ${debt.overdue_amount > 0 ? '#b91c1c' : '#a16207'}; font-size: 0.875rem;">
+                إجمالي المستحقات: ${formatNumber(debt.total_debt)} نقطة
+                ${debt.overdue_amount > 0 ? ` (متأخر: ${formatNumber(debt.overdue_amount)} نقطة)` : ''}
+              </p>
+            </div>
+            <a href="/customer/payments" class="btn ${debt.overdue_amount > 0 ? 'btn-danger' : ''}" style="${!debt.overdue_amount > 0 ? 'background: #d97706; color: white;' : ''}">سدد الآن</a>
+          </div>
+        </div>
+        ` : ''}
+        
+        <!-- Quick Actions -->
+        <div class="quick-actions mb-6">
+          <a href="/customer/transactions" class="quick-action teal">
+            <span class="icon">📋</span>
+            <span class="font-medium">معاملاتي</span>
+          </a>
+          <a href="/customer/payments" class="quick-action emerald">
+            <span class="icon">💰</span>
+            <span class="font-medium">المدفوعات</span>
+          </a>
+          <a href="/customer/credit" class="quick-action amber">
+            <span class="icon">📈</span>
+            <span class="font-medium">زيادة الحد</span>
+          </a>
+          <a href="/customer/profile" class="quick-action sky">
+            <span class="icon">👤</span>
+            <span class="font-medium">حسابي</span>
+          </a>
+        </div>
+        
+        <!-- Recent Transactions -->
+        <div class="card">
+          <div class="card-header">
+            <h2 style="font-size: 1.25rem; margin: 0;">آخر المعاملات</h2>
+            <a href="/customer/transactions" class="text-primary">عرض الكل</a>
+          </div>
+          
+          ${transactions.length > 0 ? `
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>المتجر</th>
+                    <th>التاريخ</th>
+                    <th>المبلغ</th>
+                    <th>الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${transactions.map(txn => `
+                    <tr>
+                      <td>${txn.merchant?.name_ar || 'متجر'}</td>
+                      <td>${formatDate(txn.transaction_date)}</td>
+                      <td class="font-bold">${formatNumber(txn.total_amount)} نقطة</td>
+                      <td><span class="badge ${getStatusBadgeClass(txn.status)}">${getStatusLabel(txn.status)}</span></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : `
+            <div class="text-center p-6 text-muted">
+              <span style="font-size: 3rem;">📭</span>
+              <p class="mt-4">لا توجد معاملات حتى الآن</p>
+            </div>
+          `}
+        </div>
+      `;
+
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
+      showError(container, 'حدث خطأ في تحميل البيانات');
+    }
+  }
+
+  async function confirmTransaction(id, button) {
+    button.disabled = true;
+    button.textContent = 'جاري التأكيد...';
+
+    try {
+      const result = await API.customer.confirmTransaction(id);
+      if (result.success && result.data.success) {
+        // Reload dashboard
+        loadDashboard();
+      } else {
+        alert('حدث خطأ أثناء تأكيد المعاملة');
+        button.disabled = false;
+        button.textContent = 'تأكيد ✓';
+      }
+    } catch (error) {
+      alert('حدث خطأ أثناء تأكيد المعاملة');
+      button.disabled = false;
+      button.textContent = 'تأكيد ✓';
+    }
+  }
+
+  // Load dashboard on page load
+  document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+{% endblock %}
