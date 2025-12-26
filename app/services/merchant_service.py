@@ -1139,3 +1139,121 @@ class MerchantService:
                 'message': f'Failed to update commission: {str(e)}',
                 'error_code': 'SYS_001'
             }
+
+    # ==================== Public API for Mobile App ====================
+
+    @staticmethod
+    def get_public_merchants(category=None, search=None, page=1, per_page=20):
+        """Get list of active merchants for mobile app (public endpoint)"""
+        query = Merchant.query.filter(Merchant.status == 'active')
+
+        if category:
+            query = query.filter(Merchant.business_type == category)
+
+        if search:
+            search_term = f'%{search}%'
+            query = query.filter(
+                db.or_(
+                    Merchant.name_ar.ilike(search_term),
+                    Merchant.name_en.ilike(search_term)
+                )
+            )
+
+        query = query.order_by(Merchant.name_ar)
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        merchants_data = []
+        for merchant in pagination.items:
+            # Get branch count
+            branch_count = Branch.query.filter_by(
+                merchant_id=merchant.id,
+                is_active=True
+            ).count()
+
+            merchants_data.append({
+                'id': merchant.id,
+                'name_ar': merchant.name_ar,
+                'name_en': merchant.name_en,
+                'business_type': merchant.business_type,
+                'city': merchant.city,
+                'logo_url': None,  # Add logo_url field to merchant model if needed
+                'branch_count': branch_count,
+                'rating': 4.5  # Placeholder - implement actual rating system
+            })
+
+        return {
+            'success': True,
+            'data': {
+                'merchants': merchants_data
+            },
+            'meta': {
+                'page': page,
+                'per_page': per_page,
+                'total': pagination.total,
+                'total_pages': pagination.pages
+            }
+        }
+
+    @staticmethod
+    def get_stores_for_customer(city=None, search=None, page=1, per_page=20):
+        """Get stores for customer app"""
+        return MerchantService.get_public_merchants(
+            category=None,
+            search=search,
+            page=page,
+            per_page=per_page
+        )
+
+    @staticmethod
+    def get_store_details(merchant_id):
+        """Get store details for customer app"""
+        merchant = Merchant.query.get(merchant_id)
+
+        if not merchant:
+            return {
+                'success': False,
+                'message': 'Store not found',
+                'error_code': 'MERCH_001'
+            }
+
+        if merchant.status != 'active':
+            return {
+                'success': False,
+                'message': 'Store is not available',
+                'error_code': 'MERCH_003'
+            }
+
+        # Get branches
+        branches = Branch.query.filter_by(
+            merchant_id=merchant_id,
+            is_active=True
+        ).all()
+
+        return {
+            'success': True,
+            'data': {
+                'merchant': {
+                    'id': merchant.id,
+                    'name_ar': merchant.name_ar,
+                    'name_en': merchant.name_en,
+                    'business_type': merchant.business_type,
+                    'city': merchant.city,
+                    'logo_url': None,
+                    'rating': 4.5
+                },
+                'branches': [
+                    {
+                        'id': b.id,
+                        'name_ar': b.name_ar,
+                        'name_en': b.name_en,
+                        'city': b.city,
+                        'district': b.district,
+                        'address_line': b.address_line,
+                        'phone': b.phone,
+                        'latitude': float(b.latitude) if b.latitude else None,
+                        'longitude': float(b.longitude) if b.longitude else None
+                    }
+                    for b in branches
+                ]
+            }
+        }

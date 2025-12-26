@@ -7,6 +7,28 @@ from flask_jwt_extended import jwt_required, current_user
 merchants_bp = Blueprint('merchants', __name__)
 
 
+# ==================== Public Endpoints ====================
+
+@merchants_bp.route('/public', methods=['GET'])
+def get_public_merchants():
+    """Get list of active merchants (public endpoint for app)"""
+    from app.services.merchant_service import MerchantService
+
+    category = request.args.get('category')
+    search = request.args.get('search')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
+    result = MerchantService.get_public_merchants(
+        category=category,
+        search=search,
+        page=page,
+        per_page=per_page
+    )
+
+    return jsonify(result)
+
+
 # ==================== Registration & Profile ====================
 
 @merchants_bp.route('/register', methods=['POST'])

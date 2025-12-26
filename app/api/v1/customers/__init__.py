@@ -319,3 +319,68 @@ def mark_notification_read(notification_id):
     result = NotificationService.mark_as_read(identity['id'], notification_id)
 
     return jsonify(result)
+
+
+@customers_bp.route('/me/notifications/read-all', methods=['POST'])
+@jwt_required()
+def mark_all_notifications_read():
+    """Mark all notifications as read"""
+    from app.services.notification_service import NotificationService
+
+    identity = current_user
+    result = NotificationService.mark_all_as_read(identity['id'])
+
+    return jsonify(result)
+
+
+# ==================== Credit Health ====================
+
+@customers_bp.route('/me/credit/health', methods=['GET'])
+@jwt_required()
+def get_credit_health():
+    """Get customer credit health score"""
+    from app.services.customer_service import CustomerService
+
+    identity = current_user
+    result = CustomerService.get_credit_health(identity['id'])
+
+    return jsonify(result)
+
+
+# ==================== Device Registration (FCM) ====================
+
+@customers_bp.route('/me/devices', methods=['POST'])
+@jwt_required()
+def register_device():
+    """Register device for push notifications"""
+    from app.services.notification_service import NotificationService
+
+    identity = current_user
+    data = request.get_json()
+
+    result = NotificationService.register_device(
+        customer_id=identity['id'],
+        fcm_token=data.get('fcm_token'),
+        device_type=data.get('device_type'),
+        device_name=data.get('device_name')
+    )
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    return jsonify(result), 201
+
+
+@customers_bp.route('/me/devices/<device_id>', methods=['DELETE'])
+@jwt_required()
+def unregister_device(device_id):
+    """Unregister device from push notifications"""
+    from app.services.notification_service import NotificationService
+
+    identity = current_user
+    result = NotificationService.unregister_device(identity['id'], device_id)
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    return jsonify(result)

@@ -165,6 +165,156 @@ class CustomerService:
         }
 
     @staticmethod
+    def get_credit_health(customer_id):
+        """Get customer credit health score for mobile app"""
+        customer = Customer.query.get(customer_id)
+
+        if not customer:
+            return {
+                'success': False,
+                'message': 'Customer not found',
+                'error_code': 'CUST_001'
+            }
+
+        # Calculate payment history score (0-100)
+        total_paid = Transaction.query.filter(
+            Transaction.customer_id == customer_id,
+            Transaction.status == 'paid'
+        ).count()
+
+        on_time_paid = Transaction.query.filter(
+            Transaction.customer_id == customer_id,
+            Transaction.status == 'paid',
+            Transaction.paid_at <= Transaction.due_date
+        ).count()
+
+        if total_paid > 0:
+            payment_history_score = int((on_time_paid / total_paid) * 100)
+        else:
+            payment_history_score = 100  # New customer gets full score
+
+        # Calculate credit utilization score (0-100)
+        # Lower utilization = higher score
+        if customer.credit_limit > 0:
+            utilization = float(customer.used_credit) / float(customer.credit_limit)
+            if utilization <= 0.3:
+                utilization_score = 100
+            elif utilization <= 0.5:
+                utilization_score = 80
+            elif utilization <= 0.7:
+                utilization_score = 60
+            elif utilization <= 0.9:
+                utilization_score = 40
+            else:
+                utilization_score = 20
+        else:
+            utilization_score = 100
+
+        # Calculate account age score (0-100)
+        if customer.created_at:
+            from datetime import datetime
+            days_active = (datetime.utcnow() - customer.created_at).days
+            if days_active >= 365:
+                account_age_score = 100
+            elif days_active >= 180:
+                account_age_score = 80
+            elif days_active >= 90:
+                account_age_score = 60
+            elif days_active >= 30:
+                account_age_score = 40
+            else:
+                account_age_score = 20
+        else:
+            account_age_score = 20
+
+        # Check for overdue transactions
+        overdue_count = Transaction.query.filter(
+            Transaction.customer_id == customer_id,
+            Transaction.status == 'overdue'
+        ).count()
+
+        # Penalty for overdue transactions
+        overdue_penalty = min(overdue_count * 10, 30)
+
+        # Calculate overall score (weighted average)
+        overall_score = int(
+            (payment_history_score * 0.5) +
+            (utilization_score * 0.3) +
+            (account_age_score * 0.2) -
+            overdue_penalty
+        )
+        overall_score = max(0, min(100, overall_score))
+
+        # Determine rating
+        if overall_score >= 80:
+            rating = 'excellent'
+            rating_ar = 'ممتاز'
+            stars = 5
+        elif overall_score >= 60:
+            rating = 'good'
+            rating_ar = 'جيد'
+            stars = 4
+        elif overall_score >= 40:
+            rating = 'fair'
+            rating_ar = 'متوسط'
+            stars = 3
+        else:
+            rating = 'poor'
+            rating_ar = 'ضعيف'
+            stars = 2
+
+        return {
+            'success': True,
+            'data': {
+                'score': overall_score,
+                'rating': rating,
+                'rating_ar': rating_ar,
+                'stars': stars,
+                'factors': {
+                    'payment_history': payment_history_score,
+                    'credit_utilization': utilization_score,
+                    'account_age': account_age_score
+                },
+                'tips': CustomerService._get_credit_health_tips(
+                    payment_history_score,
+                    utilization_score,
+                    overdue_count
+                )
+            }
+        }
+
+    @staticmethod
+    def _get_credit_health_tips(payment_history, utilization, overdue_count):
+        """Generate tips to improve credit health"""
+        tips = []
+
+        if overdue_count > 0:
+            tips.append({
+                'ar': f'لديك {overdue_count} معاملة متأخرة. قم بسدادها لتحسين تقييمك',
+                'en': f'You have {overdue_count} overdue transaction(s). Pay them to improve your score'
+            })
+
+        if payment_history < 80:
+            tips.append({
+                'ar': 'حاول سداد مستحقاتك في موعدها لتحسين سجل الدفعات',
+                'en': 'Try to pay your dues on time to improve your payment history'
+            })
+
+        if utilization < 60:
+            tips.append({
+                'ar': 'حافظ على نسبة استخدام منخفضة لرصيدك الائتماني',
+                'en': 'Keep your credit utilization low for a better score'
+            })
+
+        if not tips:
+            tips.append({
+                'ar': 'أداء ممتاز! حافظ على سجلك الجيد',
+                'en': 'Excellent performance! Keep up the good work'
+            })
+
+        return tips
+
+    @staticmethod
     def request_credit_increase(customer_id, requested_amount, reason=None):
         """Request credit limit increase"""
         customer = Customer.query.get(customer_id)
