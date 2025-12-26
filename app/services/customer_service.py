@@ -66,7 +66,7 @@ class CustomerService:
             }
 
         # Allowed fields to update
-        allowed_fields = ['email', 'phone', 'city', 'district', 'address_line', 'language', 'notifications_enabled']
+        allowed_fields = ['full_name_ar', 'full_name_en', 'email', 'phone', 'city', 'district', 'address_line', 'language', 'notifications_enabled']
 
         for field in allowed_fields:
             if field in data:
@@ -153,12 +153,27 @@ class CustomerService:
             Transaction.status == 'confirmed'
         ).scalar()
 
+        # Get next payment info (earliest due transaction)
+        next_payment_txn = Transaction.query.filter(
+            Transaction.customer_id == customer_id,
+            Transaction.status.in_(['confirmed', 'overdue'])
+        ).order_by(Transaction.due_date.asc()).first()
+
+        next_payment_date = None
+        next_payment_amount = 0
+
+        if next_payment_txn:
+            next_payment_date = next_payment_txn.due_date.isoformat() if next_payment_txn.due_date else None
+            next_payment_amount = next_payment_txn.remaining_amount
+
         return {
             'success': True,
             'data': {
                 'credit_limit': float(customer.credit_limit),
                 'available_credit': float(customer.available_credit),
                 'used_credit': float(customer.used_credit),
+                'next_payment_date': next_payment_date,
+                'next_payment_amount': float(next_payment_amount) if next_payment_amount else 0,
                 'pending_transactions': pending_transactions,
                 'pending_amount': float(pending_amount) if pending_amount else 0
             }

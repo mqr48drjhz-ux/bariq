@@ -232,18 +232,40 @@ def get_payments():
 @customers_bp.route('/me/payments', methods=['POST'])
 @jwt_required()
 def make_payment():
-    """Make a payment"""
+    """Make a payment for one or multiple transactions"""
     from app.services.payment_service import PaymentService
 
     identity = current_user
     data = request.get_json()
 
-    result = PaymentService.make_payment(
-        identity['id'],
-        data.get('transaction_id'),
-        data.get('amount'),
-        data.get('payment_method')
-    )
+    # Support both single transaction_id and array of transaction_ids
+    transaction_ids = data.get('transaction_ids')
+    transaction_id = data.get('transaction_id')
+    amount = data.get('amount')
+    payment_method = data.get('payment_method', 'card')
+
+    if transaction_ids and isinstance(transaction_ids, list):
+        # Pay for multiple transactions
+        result = PaymentService.make_multi_transaction_payment(
+            identity['id'],
+            transaction_ids,
+            amount,
+            payment_method
+        )
+    elif transaction_id:
+        # Pay for single transaction (backward compatibility)
+        result = PaymentService.make_payment(
+            identity['id'],
+            transaction_id,
+            amount,
+            payment_method
+        )
+    else:
+        return jsonify({
+            'success': False,
+            'message': 'Either transaction_id or transaction_ids is required',
+            'error_code': 'VAL_001'
+        }), 400
 
     if not result['success']:
         return jsonify(result), 400

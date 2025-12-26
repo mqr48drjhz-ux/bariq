@@ -36,11 +36,14 @@ class Notification(db.Model, TimestampMixin):
     def to_dict(self):
         return {
             'id': self.id,
+            'title': self.title_ar,  # Default to Arabic for mobile app
+            'body': self.body_ar,    # Default to Arabic for mobile app
             'title_ar': self.title_ar,
             'title_en': self.title_en,
             'body_ar': self.body_ar,
             'body_en': self.body_en,
             'type': self.type,
             'is_read': self.is_read,
+            'read_at': self.read_at.isoformat() if self.read_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }

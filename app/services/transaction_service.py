@@ -241,6 +241,11 @@ class TransactionService:
             }
 
         txn_dict = transaction.to_dict()
+
+        # Add merchant_name at top level for easier mobile access
+        txn_dict['merchant_name'] = transaction.merchant.name_ar
+        txn_dict['created_at'] = transaction.transaction_date.isoformat() if transaction.transaction_date else None
+
         txn_dict['merchant'] = {
             'id': transaction.merchant.id,
             'name_ar': transaction.merchant.name_ar,
@@ -267,9 +272,7 @@ class TransactionService:
 
         return {
             'success': True,
-            'data': {
-                'transaction': txn_dict
-            }
+            'data': txn_dict
         }
 
     # ==================== Confirm/Reject Transaction ====================

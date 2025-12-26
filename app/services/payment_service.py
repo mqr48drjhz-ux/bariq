@@ -225,6 +225,137 @@ class PaymentService:
     # ==================== Pay Multiple Transactions ====================
 
     @staticmethod
+    def make_multi_transaction_payment(customer_id, transaction_ids, total_amount, payment_method='card'):
+        """Pay for specific transactions (by IDs)"""
+        customer = Customer.query.get(customer_id)
+
+        if not customer:
+            return {
+                'success': False,
+                'message': 'Customer not found',
+                'error_code': 'CUST_001'
+            }
+
+        if not transaction_ids or len(transaction_ids) == 0:
+            return {
+                'success': False,
+                'message': 'At least one transaction_id is required',
+                'error_code': 'VAL_001'
+            }
+
+        total_amount = float(total_amount) if total_amount else 0
+
+        if total_amount <= 0:
+            return {
+                'success': False,
+                'message': 'Payment amount must be positive',
+                'error_code': 'VAL_001'
+            }
+
+        # Get specified transactions
+        transactions = Transaction.query.filter(
+            Transaction.id.in_(transaction_ids),
+            Transaction.customer_id == customer_id,
+            Transaction.status.in_(['confirmed', 'overdue'])
+        ).order_by(Transaction.due_date.asc()).all()
+
+        if not transactions:
+            return {
+                'success': False,
+                'message': 'No valid transactions found',
+                'error_code': 'TXN_001'
+            }
+
+        # Calculate total remaining for selected transactions
+        total_remaining = sum(t.remaining_amount for t in transactions)
+
+        if total_amount > total_remaining:
+            return {
+                'success': False,
+                'message': f'Payment amount exceeds total remaining of {total_remaining} SAR',
+                'error_code': 'VAL_001'
+            }
+
+        # Valid payment methods
+        valid_methods = ['cash', 'bank_transfer', 'card', 'mada', 'apple_pay', 'stc_pay']
+        if payment_method not in valid_methods:
+            payment_method = 'card'
+
+        try:
+            remaining_payment = total_amount
+            payments_made = []
+            main_payment_ref = None
+
+            for txn in transactions:
+                if remaining_payment <= 0:
+                    break
+
+                txn_remaining = txn.remaining_amount
+                payment_for_txn = min(remaining_payment, txn_remaining)
+
+                # Create payment
+                payment = Payment(
+                    transaction_id=txn.id,
+                    customer_id=customer_id,
+                    amount=payment_for_txn,
+                    payment_method=payment_method,
+                    status='completed',
+                    completed_at=datetime.utcnow()
+                )
+                db.session.add(payment)
+
+                if not main_payment_ref:
+                    main_payment_ref = payment.reference_number
+
+                # Update transaction
+                txn.paid_amount = float(txn.paid_amount) + payment_for_txn
+                txn.updated_at = datetime.utcnow()
+
+                if txn.remaining_amount <= 0:
+                    txn.status = 'paid'
+                    txn.paid_at = datetime.utcnow()
+
+                payments_made.append({
+                    'payment_id': payment.id,
+                    'transaction_id': txn.id,
+                    'reference_number': txn.reference_number,
+                    'amount': payment_for_txn,
+                    'transaction_status': txn.status
+                })
+
+                remaining_payment -= payment_for_txn
+
+            # Update customer credit
+            customer.available_credit = float(customer.available_credit) + total_amount
+            customer.used_credit = float(customer.used_credit) - total_amount
+            customer.updated_at = datetime.utcnow()
+
+            db.session.commit()
+
+            return {
+                'success': True,
+                'message': 'Payment processed successfully',
+                'data': {
+                    'id': payments_made[0]['payment_id'] if payments_made else None,
+                    'reference_number': main_payment_ref,
+                    'amount': total_amount,
+                    'status': 'completed',
+                    'payments': payments_made,
+                    'credit': {
+                        'available_credit': float(customer.available_credit),
+                        'used_credit': float(customer.used_credit)
+                    }
+                }
+            }
+        except Exception as e:
+            db.session.rollback()
+            return {
+                'success': False,
+                'message': f'Failed to process payment: {str(e)}',
+                'error_code': 'SYS_001'
+            }
+
+    @staticmethod
     def make_bulk_payment(customer_id, total_amount, payment_method='cash'):
         """Pay multiple transactions at once (oldest first)"""
         customer = Customer.query.get(customer_id)
