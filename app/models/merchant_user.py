@@ -7,6 +7,34 @@ import uuid
 import bcrypt
 
 
+# Role hierarchy (higher number = more permissions)
+ROLE_HIERARCHY = {
+    'owner': 5,
+    'executive_manager': 5,  # Same level as owner
+    'region_manager': 3,
+    'branch_manager': 2,
+    'cashier': 1
+}
+
+# Role display names in Arabic
+ROLE_NAMES_AR = {
+    'owner': 'المالك',
+    'executive_manager': 'المدير التنفيذي',
+    'region_manager': 'مدير المنطقة',
+    'branch_manager': 'مدير الفرع',
+    'cashier': 'كاشير'
+}
+
+# Role display names in English
+ROLE_NAMES_EN = {
+    'owner': 'Owner',
+    'executive_manager': 'Executive Manager',
+    'region_manager': 'Region Manager',
+    'branch_manager': 'Branch Manager',
+    'cashier': 'Cashier'
+}
+
+
 class MerchantUser(db.Model, TimestampMixin):
     """Merchant User model - Staff members"""
 
@@ -28,7 +56,7 @@ class MerchantUser(db.Model, TimestampMixin):
 
     # Role
     role = db.Column(db.String(30), nullable=False, index=True)
-    # owner, general_manager, region_manager, branch_manager, cashier
+    # owner, executive_manager, region_manager, branch_manager, cashier
 
     # Permissions (JSON array)
     permissions = db.Column(db.JSON, default=[], nullable=True)
@@ -66,6 +94,80 @@ class MerchantUser(db.Model, TimestampMixin):
             'full_name': self.full_name,
             'phone': self.phone,
             'role': self.role,
+            'role_ar': ROLE_NAMES_AR.get(self.role, self.role),
+            'role_en': ROLE_NAMES_EN.get(self.role, self.role),
             'permissions': self.permissions or [],
             'is_active': self.is_active,
+            'role_level': ROLE_HIERARCHY.get(self.role, 0),
         }
+
+    def get_role_level(self):
+        """Get numeric role level for comparison"""
+        return ROLE_HIERARCHY.get(self.role, 0)
+
+    def can_manage(self, other_user):
+        """Check if this user can manage another user"""
+        return self.get_role_level() > other_user.get_role_level()
+
+    def is_top_level(self):
+        """Check if user is owner or executive manager"""
+        return self.role in ['owner', 'executive_manager']
+
+    def can_see_all_regions(self):
+        """Check if user can see all regions"""
+        return self.role in ['owner', 'executive_manager']
+
+    def can_see_all_branches(self):
+        """Check if user can see all branches"""
+        return self.role in ['owner', 'executive_manager']
+
+    def can_manage_staff(self):
+        """Check if user can manage staff"""
+        return self.role in ['owner', 'executive_manager', 'region_manager', 'branch_manager']
+
+    def can_create_transactions(self):
+        """Check if user can create transactions"""
+        return self.role in ['cashier', 'branch_manager', 'region_manager', 'executive_manager', 'owner']
+
+    def get_accessible_branch_ids(self):
+        """Get list of branch IDs this user can access"""
+        if self.can_see_all_branches():
+            from app.models.branch import Branch
+            branches = Branch.query.filter_by(merchant_id=self.merchant_id, is_active=True).all()
+            return [b.id for b in branches]
+        elif self.role == 'region_manager' and self.region_id:
+            from app.models.branch import Branch
+            branches = Branch.query.filter_by(region_id=self.region_id, is_active=True).all()
+            return [b.id for b in branches]
+        elif self.branch_id:
+            return [self.branch_id]
+        return []
+
+    def get_accessible_region_ids(self):
+        """Get list of region IDs this user can access"""
+        if self.can_see_all_regions():
+            from app.models.region import Region
+            regions = Region.query.filter_by(merchant_id=self.merchant_id, is_active=True).all()
+            return [r.id for r in regions]
+        elif self.region_id:
+            return [self.region_id]
+        return []
+
+    def get_subordinates(self):
+        """Get all users this user can manage"""
+        my_level = self.get_role_level()
+        query = MerchantUser.query.filter(
+            MerchantUser.merchant_id == self.merchant_id,
+            MerchantUser.id != self.id,
+            MerchantUser.is_active == True
+        )
+
+        if self.role == 'region_manager' and self.region_id:
+            # Region manager sees branch managers and cashiers in their region
+            query = query.filter(MerchantUser.region_id == self.region_id)
+        elif self.role == 'branch_manager' and self.branch_id:
+            # Branch manager sees only cashiers in their branch
+            query = query.filter(MerchantUser.branch_id == self.branch_id)
+
+        subordinates = query.all()
+        return [u for u in subordinates if u.get_role_level() < my_level]

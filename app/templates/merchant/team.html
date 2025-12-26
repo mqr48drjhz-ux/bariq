@@ -1,0 +1,943 @@
+{% extends "merchant/layout.html" %}
+
+{% block title %}فريق العمل - التاجر{% endblock %}
+
+{% block page_content %}
+<div id="team-content">
+    <div class="loading-container">
+        <div class="spinner"></div>
+    </div>
+</div>
+
+<!-- Add Staff Modal -->
+<div id="add-staff-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>إضافة موظف جديد</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="add-staff-form" onsubmit="handleAddStaff(event)">
+                <div class="form-group">
+                    <label class="form-label">الاسم الكامل *</label>
+                    <input type="text" name="full_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">البريد الإلكتروني *</label>
+                    <input type="email" name="email" class="form-input" dir="ltr" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">رقم الجوال</label>
+                    <input type="tel" name="phone" class="form-input" dir="ltr">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">كلمة المرور *</label>
+                    <input type="password" name="password" class="form-input" dir="ltr" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">الوظيفة *</label>
+                    <select name="role" class="form-input" required onchange="onRoleChange(this)">
+                        <option value="">اختر الوظيفة</option>
+                        <!-- Options will be added dynamically based on user role -->
+                    </select>
+                </div>
+                <div class="form-group" id="region-group" style="display: none;">
+                    <label class="form-label">المنطقة *</label>
+                    <select name="region_id" class="form-input">
+                        <option value="">اختر المنطقة</option>
+                    </select>
+                </div>
+                <div class="form-group" id="branch-group" style="display: none;">
+                    <label class="form-label">الفرع *</label>
+                    <select name="branch_id" class="form-input">
+                        <option value="">اختر الفرع</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">إضافة الموظف</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Staff Modal -->
+<div id="edit-staff-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeEditModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>تعديل بيانات الموظف</h3>
+            <button class="modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="edit-staff-form" onsubmit="handleEditStaff(event)">
+                <input type="hidden" name="staff_id" id="edit-staff-id">
+                <div class="form-group">
+                    <label class="form-label">الاسم الكامل *</label>
+                    <input type="text" name="full_name" id="edit-full-name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">البريد الإلكتروني *</label>
+                    <input type="email" name="email" id="edit-email" class="form-input" dir="ltr" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">رقم الجوال</label>
+                    <input type="tel" name="phone" id="edit-phone" class="form-input" dir="ltr">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">الحالة</label>
+                    <select name="is_active" id="edit-status" class="form-input">
+                        <option value="true">نشط</option>
+                        <option value="false">غير نشط</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+    let allStaff = [];
+    let allRegions = [];
+    let allBranches = [];
+    let currentView = 'tree'; // 'tree' or 'list'
+
+    async function loadTeam() {
+        const container = document.getElementById('team-content');
+        const user = TokenManager.getUser();
+        const role = user?.role || 'cashier';
+
+        try {
+            // Load data
+            const [staffRes, branchesRes] = await Promise.all([
+                API.merchant.getStaff(),
+                API.merchant.getBranches()
+            ]);
+
+            allStaff = staffRes.data?.data?.staff || [];
+            allBranches = branchesRes.data?.data?.branches || [];
+
+            if (isTopLevel()) {
+                const regionsRes = await API.merchant.getRegions();
+                allRegions = regionsRes.data?.data?.regions || [];
+            }
+
+            container.innerHTML = `
+                <!-- Page Header -->
+                <div class="page-header flex justify-between items-center mb-6">
+                    <div>
+                        <h1 class="page-title">فريق العمل</h1>
+                        <p class="text-muted">إدارة الموظفين والهيكل التنظيمي</p>
+                    </div>
+                    ${canManageStaff() ? `
+                    <button class="btn btn-primary" onclick="openAddModal()">
+                        <span>➕</span> إضافة موظف
+                    </button>
+                    ` : ''}
+                </div>
+
+                <!-- View Toggle -->
+                <div class="view-toggle mb-6">
+                    <button class="toggle-btn ${currentView === 'tree' ? 'active' : ''}" onclick="switchView('tree')">
+                        <span>🌳</span> الهيكل التنظيمي
+                    </button>
+                    <button class="toggle-btn ${currentView === 'list' ? 'active' : ''}" onclick="switchView('list')">
+                        <span>📋</span> قائمة الموظفين
+                    </button>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="grid grid-4 mb-6">
+                    ${isTopLevel() ? `
+                    <div class="stat-card teal">
+                        <div class="stat-card-header">
+                            <span>مدراء تنفيذيون</span>
+                            <span style="font-size: 2rem;">👔</span>
+                        </div>
+                        <div class="stat-card-value">${allStaff.filter(s => s.role === 'executive_manager').length}</div>
+                    </div>
+                    <div class="stat-card emerald">
+                        <div class="stat-card-header">
+                            <span>مدراء مناطق</span>
+                            <span style="font-size: 2rem;">🗺️</span>
+                        </div>
+                        <div class="stat-card-value">${allStaff.filter(s => s.role === 'region_manager').length}</div>
+                    </div>
+                    ` : ''}
+                    <div class="stat-card ${isTopLevel() ? 'amber' : 'teal'}">
+                        <div class="stat-card-header">
+                            <span>مدراء فروع</span>
+                            <span style="font-size: 2rem;">🏪</span>
+                        </div>
+                        <div class="stat-card-value">${allStaff.filter(s => s.role === 'branch_manager').length}</div>
+                    </div>
+                    <div class="stat-card blue">
+                        <div class="stat-card-header">
+                            <span>كاشير</span>
+                            <span style="font-size: 2rem;">💳</span>
+                        </div>
+                        <div class="stat-card-value">${allStaff.filter(s => s.role === 'cashier').length}</div>
+                    </div>
+                </div>
+
+                <!-- Content -->
+                <div id="team-view-content" class="card">
+                    <!-- Will be populated by renderView() -->
+                </div>
+            `;
+
+            // Populate role options for add modal
+            populateRoleOptions();
+            populateFilters();
+
+            // Render initial view
+            renderView();
+
+        } catch (error) {
+            console.error('Error loading team:', error);
+            showError(container, 'حدث خطأ في تحميل البيانات');
+        }
+    }
+
+    function switchView(view) {
+        currentView = view;
+        document.querySelectorAll('.toggle-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.textContent.includes(view === 'tree' ? 'الهيكل' : 'قائمة'));
+        });
+        renderView();
+    }
+
+    function renderView() {
+        const container = document.getElementById('team-view-content');
+        if (currentView === 'tree') {
+            renderTreeView(container);
+        } else {
+            renderListView(container);
+        }
+    }
+
+    function renderTreeView(container) {
+        const user = TokenManager.getUser();
+
+        // Build hierarchy
+        let html = '<div class="org-tree">';
+
+        if (isTopLevel()) {
+            // Show full hierarchy
+            // Executive Managers
+            const executives = allStaff.filter(s => s.role === 'executive_manager');
+
+            html += `
+                <div class="tree-level level-0">
+                    <div class="tree-node owner">
+                        <div class="node-icon">👑</div>
+                        <div class="node-info">
+                            <div class="node-title">المالك</div>
+                            <div class="node-subtitle">${user?.full_name || ''}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            if (executives.length > 0) {
+                html += '<div class="tree-connector"></div>';
+                html += '<div class="tree-level level-1">';
+                executives.forEach(exec => {
+                    html += renderStaffNode(exec, 'executive');
+                });
+                html += '</div>';
+            }
+
+            // Region Managers
+            allRegions.forEach(region => {
+                const regionManagers = allStaff.filter(s => s.role === 'region_manager' && s.region_id === region.id);
+                const regionBranches = allBranches.filter(b => b.region_id === region.id);
+
+                if (regionManagers.length > 0 || regionBranches.length > 0) {
+                    html += `
+                        <div class="tree-connector"></div>
+                        <div class="tree-section">
+                            <div class="section-header">
+                                <span class="section-icon">🗺️</span>
+                                <span class="section-title">${region.name_ar}</span>
+                            </div>
+                    `;
+
+                    if (regionManagers.length > 0) {
+                        html += '<div class="tree-level level-2">';
+                        regionManagers.forEach(rm => {
+                            html += renderStaffNode(rm, 'region');
+                        });
+                        html += '</div>';
+                    }
+
+                    // Branches in this region
+                    regionBranches.forEach(branch => {
+                        html += renderBranchTree(branch);
+                    });
+
+                    html += '</div>'; // tree-section
+                }
+            });
+
+            // Branches without region
+            const unassignedBranches = allBranches.filter(b => !b.region_id);
+            if (unassignedBranches.length > 0) {
+                html += '<div class="tree-section"><div class="section-header"><span>فروع بدون منطقة</span></div>';
+                unassignedBranches.forEach(branch => {
+                    html += renderBranchTree(branch);
+                });
+                html += '</div>';
+            }
+
+        } else if (user?.role === 'region_manager') {
+            // Show only region's branches
+            const regionBranches = allBranches.filter(b => b.region_id === user.region_id);
+            html += `<div class="tree-level level-0">
+                <div class="tree-node region">
+                    <div class="node-icon">🗺️</div>
+                    <div class="node-info">
+                        <div class="node-title">مدير المنطقة</div>
+                        <div class="node-subtitle">${user?.full_name || ''}</div>
+                    </div>
+                </div>
+            </div>`;
+
+            regionBranches.forEach(branch => {
+                html += renderBranchTree(branch);
+            });
+
+        } else if (user?.role === 'branch_manager') {
+            // Show only branch staff
+            const branch = allBranches.find(b => b.id === user.branch_id);
+            html += `<div class="tree-level level-0">
+                <div class="tree-node branch">
+                    <div class="node-icon">🏪</div>
+                    <div class="node-info">
+                        <div class="node-title">${branch?.name_ar || 'الفرع'}</div>
+                        <div class="node-subtitle">${user?.full_name || ''} - مدير الفرع</div>
+                    </div>
+                </div>
+            </div>`;
+
+            const branchCashiers = allStaff.filter(s => s.role === 'cashier' && s.branch_id === user.branch_id);
+            if (branchCashiers.length > 0) {
+                html += '<div class="tree-connector"></div><div class="tree-level level-1">';
+                branchCashiers.forEach(c => {
+                    html += renderStaffNode(c, 'cashier');
+                });
+                html += '</div>';
+            }
+        }
+
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    function renderBranchTree(branch) {
+        const branchManager = allStaff.find(s => s.role === 'branch_manager' && s.branch_id === branch.id);
+        const cashiers = allStaff.filter(s => s.role === 'cashier' && s.branch_id === branch.id);
+
+        let html = `
+            <div class="tree-connector small"></div>
+            <div class="branch-tree">
+                <div class="branch-header">
+                    <span class="branch-icon">🏪</span>
+                    <span class="branch-name">${branch.name_ar}</span>
+                    <span class="branch-city text-muted">${branch.city || ''}</span>
+                </div>
+        `;
+
+        if (branchManager) {
+            html += '<div class="tree-level level-3">' + renderStaffNode(branchManager, 'branch') + '</div>';
+        }
+
+        if (cashiers.length > 0) {
+            html += '<div class="tree-level level-4">';
+            cashiers.forEach(c => {
+                html += renderStaffNode(c, 'cashier');
+            });
+            html += '</div>';
+        }
+
+        html += '</div>';
+        return html;
+    }
+
+    function renderStaffNode(staff, type) {
+        const typeClasses = {
+            'executive': 'node-executive',
+            'region': 'node-region',
+            'branch': 'node-branch',
+            'cashier': 'node-cashier'
+        };
+
+        const icons = {
+            'executive': '👔',
+            'region': '🗺️',
+            'branch': '👤',
+            'cashier': '💳'
+        };
+
+        return `
+            <div class="tree-node ${typeClasses[type]}" onclick="showStaffDetails('${staff.id}')">
+                <div class="node-icon">${icons[type]}</div>
+                <div class="node-info">
+                    <div class="node-title">${staff.full_name}</div>
+                    <div class="node-subtitle">${roleNamesAr[staff.role] || staff.role}</div>
+                </div>
+                <span class="badge ${staff.is_active ? 'badge-success' : 'badge-gray'} node-status">
+                    ${staff.is_active ? 'نشط' : 'غير نشط'}
+                </span>
+            </div>
+        `;
+    }
+
+    function renderListView(container) {
+        const user = TokenManager.getUser();
+
+        // Filter controls
+        let filterHtml = `
+            <div class="list-filters mb-4 p-4" style="background: var(--gray-50); border-radius: var(--radius-lg);">
+                <div class="flex gap-4 flex-wrap">
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label">الوظيفة</label>
+                        <select id="filter-role" class="form-input" onchange="filterList()">
+                            <option value="">الكل</option>
+                            ${isTopLevel() ? '<option value="executive_manager">مدير تنفيذي</option>' : ''}
+                            ${isTopLevel() ? '<option value="region_manager">مدير منطقة</option>' : ''}
+                            <option value="branch_manager">مدير فرع</option>
+                            <option value="cashier">كاشير</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label">الحالة</label>
+                        <select id="filter-status" class="form-input" onchange="filterList()">
+                            <option value="">الكل</option>
+                            <option value="active">نشط</option>
+                            <option value="inactive">غير نشط</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label class="form-label">البحث</label>
+                        <input type="text" id="filter-search" class="form-input" placeholder="اسم أو بريد..." oninput="filterList()">
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = filterHtml + `
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>الموظف</th>
+                            <th>الوظيفة</th>
+                            <th>البريد الإلكتروني</th>
+                            ${isTopLevel() || user?.role === 'region_manager' ? '<th>الفرع</th>' : ''}
+                            <th>الحالة</th>
+                            ${canManageStaff() ? '<th>إجراءات</th>' : ''}
+                        </tr>
+                    </thead>
+                    <tbody id="staff-list-body">
+                        ${renderStaffRows(allStaff)}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function renderStaffRows(staffList) {
+        const user = TokenManager.getUser();
+
+        if (staffList.length === 0) {
+            return `<tr><td colspan="6" class="text-center p-6 text-muted">لا يوجد موظفون</td></tr>`;
+        }
+
+        return staffList.map(s => {
+            const branch = allBranches.find(b => b.id === s.branch_id);
+            const canEdit = user && (user.role === 'owner' || user.role === 'executive_manager' ||
+                (user.role === 'region_manager' && s.role !== 'region_manager' && s.role !== 'executive_manager') ||
+                (user.role === 'branch_manager' && s.role === 'cashier'));
+
+            return `
+                <tr>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <div class="staff-avatar">${s.full_name?.charAt(0) || '?'}</div>
+                            <div>
+                                <div class="font-bold">${s.full_name}</div>
+                                <div class="text-sm text-muted">${s.phone || ''}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td><span class="badge badge-info">${roleNamesAr[s.role] || s.role}</span></td>
+                    <td style="direction: ltr; text-align: left;">${s.email}</td>
+                    ${isTopLevel() || user?.role === 'region_manager' ? `<td>${branch?.name_ar || '-'}</td>` : ''}
+                    <td><span class="badge ${s.is_active ? 'badge-success' : 'badge-gray'}">${s.is_active ? 'نشط' : 'غير نشط'}</span></td>
+                    ${canManageStaff() ? `
+                    <td>
+                        ${canEdit ? `
+                        <button class="btn btn-sm btn-secondary" onclick="editStaff('${s.id}')">تعديل</button>
+                        ` : '-'}
+                    </td>
+                    ` : ''}
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function filterList() {
+        const roleFilter = document.getElementById('filter-role')?.value;
+        const statusFilter = document.getElementById('filter-status')?.value;
+        const searchFilter = document.getElementById('filter-search')?.value?.toLowerCase();
+
+        let filtered = allStaff;
+
+        if (roleFilter) {
+            filtered = filtered.filter(s => s.role === roleFilter);
+        }
+        if (statusFilter) {
+            filtered = filtered.filter(s => statusFilter === 'active' ? s.is_active : !s.is_active);
+        }
+        if (searchFilter) {
+            filtered = filtered.filter(s =>
+                s.full_name?.toLowerCase().includes(searchFilter) ||
+                s.email?.toLowerCase().includes(searchFilter)
+            );
+        }
+
+        document.getElementById('staff-list-body').innerHTML = renderStaffRows(filtered);
+    }
+
+    function populateRoleOptions() {
+        const user = TokenManager.getUser();
+        const roleSelect = document.querySelector('select[name="role"]');
+        if (!roleSelect) return;
+
+        const options = [];
+        if (user?.role === 'owner' || user?.role === 'executive_manager') {
+            options.push({ value: 'executive_manager', label: 'مدير تنفيذي' });
+            options.push({ value: 'region_manager', label: 'مدير منطقة' });
+            options.push({ value: 'branch_manager', label: 'مدير فرع' });
+            options.push({ value: 'cashier', label: 'كاشير' });
+        } else if (user?.role === 'region_manager') {
+            options.push({ value: 'branch_manager', label: 'مدير فرع' });
+            options.push({ value: 'cashier', label: 'كاشير' });
+        } else if (user?.role === 'branch_manager') {
+            options.push({ value: 'cashier', label: 'كاشير' });
+        }
+
+        options.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            roleSelect.appendChild(option);
+        });
+    }
+
+    function populateFilters() {
+        // Populate regions
+        const regionSelect = document.querySelector('select[name="region_id"]');
+        if (regionSelect) {
+            allRegions.forEach(r => {
+                const option = document.createElement('option');
+                option.value = r.id;
+                option.textContent = r.name_ar;
+                regionSelect.appendChild(option);
+            });
+        }
+
+        // Populate branches
+        const branchSelect = document.querySelector('select[name="branch_id"]');
+        if (branchSelect) {
+            allBranches.forEach(b => {
+                const option = document.createElement('option');
+                option.value = b.id;
+                option.textContent = b.name_ar;
+                option.dataset.regionId = b.region_id;
+                branchSelect.appendChild(option);
+            });
+        }
+    }
+
+    function onRoleChange(select) {
+        const role = select.value;
+        const regionGroup = document.getElementById('region-group');
+        const branchGroup = document.getElementById('branch-group');
+
+        if (role === 'region_manager') {
+            regionGroup.style.display = 'block';
+            branchGroup.style.display = 'none';
+        } else if (role === 'branch_manager' || role === 'cashier') {
+            regionGroup.style.display = 'none';
+            branchGroup.style.display = 'block';
+        } else {
+            regionGroup.style.display = 'none';
+            branchGroup.style.display = 'none';
+        }
+    }
+
+    function openAddModal() {
+        document.getElementById('add-staff-modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+        document.getElementById('add-staff-modal').classList.add('hidden');
+        document.getElementById('add-staff-form').reset();
+        document.getElementById('region-group').style.display = 'none';
+        document.getElementById('branch-group').style.display = 'none';
+    }
+
+    async function handleAddStaff(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+
+        const data = {
+            full_name: formData.get('full_name'),
+            email: formData.get('email'),
+            phone: formData.get('phone'),
+            password: formData.get('password'),
+            role: formData.get('role'),
+        };
+
+        if (formData.get('region_id')) data.region_id = formData.get('region_id');
+        if (formData.get('branch_id')) data.branch_id = formData.get('branch_id');
+
+        try {
+            const res = await API.merchant.addStaff(data);
+            if (res.success) {
+                closeModal();
+                loadTeam();
+                alert('تم إضافة الموظف بنجاح');
+            } else {
+                alert(res.data?.message || 'حدث خطأ');
+            }
+        } catch (error) {
+            console.error('Error adding staff:', error);
+            alert('حدث خطأ في إضافة الموظف');
+        }
+    }
+
+    function editStaff(staffId) {
+        const staff = allStaff.find(s => s.id === staffId);
+        if (!staff) return;
+
+        document.getElementById('edit-staff-id').value = staff.id;
+        document.getElementById('edit-full-name').value = staff.full_name || '';
+        document.getElementById('edit-email').value = staff.email || '';
+        document.getElementById('edit-phone').value = staff.phone || '';
+        document.getElementById('edit-status').value = staff.is_active ? 'true' : 'false';
+
+        document.getElementById('edit-staff-modal').classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+        document.getElementById('edit-staff-modal').classList.add('hidden');
+    }
+
+    async function handleEditStaff(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+        const staffId = formData.get('staff_id');
+
+        const data = {
+            full_name: formData.get('full_name'),
+            email: formData.get('email'),
+            phone: formData.get('phone'),
+            is_active: formData.get('is_active') === 'true',
+        };
+
+        try {
+            const res = await API.merchant.updateStaff(staffId, data);
+            if (res.success) {
+                closeEditModal();
+                loadTeam();
+                alert('تم تحديث بيانات الموظف بنجاح');
+            } else {
+                alert(res.data?.message || 'حدث خطأ');
+            }
+        } catch (error) {
+            console.error('Error updating staff:', error);
+            alert('حدث خطأ في تحديث بيانات الموظف');
+        }
+    }
+
+    function showStaffDetails(staffId) {
+        editStaff(staffId);
+    }
+
+    document.addEventListener('DOMContentLoaded', loadTeam);
+</script>
+
+<style>
+    .page-title {
+        font-size: 1.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .view-toggle {
+        display: flex;
+        gap: 0.5rem;
+        background: var(--gray-100);
+        padding: 0.25rem;
+        border-radius: var(--radius-xl);
+        width: fit-content;
+    }
+
+    .toggle-btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: transparent;
+        border-radius: var(--radius-lg);
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        color: var(--gray-500);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .toggle-btn.active {
+        background: white;
+        color: var(--teal-600);
+        box-shadow: var(--shadow);
+    }
+
+    /* Org Tree Styles */
+    .org-tree {
+        padding: 2rem;
+    }
+
+    .tree-level {
+        display: flex;
+        justify-content: center;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        margin: 1rem 0;
+    }
+
+    .tree-connector {
+        height: 2rem;
+        width: 2px;
+        background: var(--gray-300);
+        margin: 0 auto;
+    }
+
+    .tree-connector.small {
+        height: 1rem;
+    }
+
+    .tree-node {
+        background: white;
+        border: 2px solid var(--gray-200);
+        border-radius: var(--radius-xl);
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        min-width: 200px;
+        position: relative;
+    }
+
+    .tree-node:hover {
+        border-color: var(--teal-300);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+    }
+
+    .tree-node.owner {
+        border-color: var(--amber-400);
+        background: linear-gradient(135deg, #fffbeb, white);
+    }
+
+    .tree-node.node-executive {
+        border-color: var(--teal-400);
+        background: linear-gradient(135deg, var(--teal-50), white);
+    }
+
+    .tree-node.node-region {
+        border-color: var(--emerald-400);
+        background: linear-gradient(135deg, #ecfdf5, white);
+    }
+
+    .tree-node.node-branch {
+        border-color: var(--sky-400);
+        background: linear-gradient(135deg, #eff6ff, white);
+    }
+
+    .tree-node.node-cashier {
+        border-color: var(--gray-300);
+    }
+
+    .node-icon {
+        font-size: 1.5rem;
+    }
+
+    .node-info {
+        flex: 1;
+    }
+
+    .node-title {
+        font-weight: 700;
+        color: var(--gray-800);
+    }
+
+    .node-subtitle {
+        font-size: 0.75rem;
+        color: var(--gray-500);
+    }
+
+    .node-status {
+        font-size: 0.65rem;
+    }
+
+    .tree-section {
+        margin: 1.5rem 0;
+        padding: 1.5rem;
+        background: var(--gray-50);
+        border-radius: var(--radius-xl);
+    }
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: var(--gray-700);
+    }
+
+    .section-icon {
+        font-size: 1.25rem;
+    }
+
+    .branch-tree {
+        margin: 0.5rem 0;
+        padding: 1rem;
+        background: white;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--gray-200);
+    }
+
+    .branch-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .branch-icon {
+        font-size: 1.25rem;
+    }
+
+    .branch-name {
+        font-weight: 700;
+    }
+
+    .branch-city {
+        font-size: 0.875rem;
+    }
+
+    /* Staff Avatar */
+    .staff-avatar {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, var(--teal-400), var(--teal-500));
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        font-size: 1rem;
+    }
+
+    /* Modal Styles */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal.hidden {
+        display: none !important;
+    }
+
+    .modal-backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-content {
+        position: relative;
+        background: white;
+        border-radius: var(--radius-2xl);
+        width: 100%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: var(--shadow-xl);
+    }
+
+    .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.5rem;
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .modal-header h3 {
+        margin: 0;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--gray-500);
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--gray-200);
+    }
+</style>
+{% endblock %}

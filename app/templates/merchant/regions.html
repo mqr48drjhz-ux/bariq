@@ -1,0 +1,603 @@
+{% extends "merchant/layout.html" %}
+
+{% block title %}المناطق - التاجر{% endblock %}
+
+{% block page_content %}
+<div id="regions-content">
+    <div class="loading-container">
+        <div class="spinner"></div>
+    </div>
+</div>
+
+<!-- Add Region Modal -->
+<div id="add-region-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeAddModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>إضافة منطقة جديدة</h3>
+            <button class="modal-close" onclick="closeAddModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="add-region-form" onsubmit="handleAddRegion(event)">
+                <div class="form-group">
+                    <label class="form-label">اسم المنطقة (عربي) *</label>
+                    <input type="text" name="name_ar" class="form-input" required placeholder="مثال: المنطقة الوسطى">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">اسم المنطقة (إنجليزي)</label>
+                    <input type="text" name="name_en" class="form-input" dir="ltr" placeholder="e.g. Central Region">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">المدينة</label>
+                    <input type="text" name="city" class="form-input" placeholder="مثال: الرياض">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">وصف المنطقة</label>
+                    <textarea name="area_description" class="form-input" rows="3" placeholder="وصف تفصيلي للمنطقة..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddModal()">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">إضافة المنطقة</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Region Modal -->
+<div id="edit-region-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="closeEditModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>تعديل المنطقة</h3>
+            <button class="modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="edit-region-form" onsubmit="handleEditRegion(event)">
+                <input type="hidden" name="region_id" id="edit-region-id">
+                <div class="form-group">
+                    <label class="form-label">اسم المنطقة (عربي) *</label>
+                    <input type="text" name="name_ar" id="edit-name-ar" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">اسم المنطقة (إنجليزي)</label>
+                    <input type="text" name="name_en" id="edit-name-en" class="form-input" dir="ltr">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">المدينة</label>
+                    <input type="text" name="city" id="edit-city" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">وصف المنطقة</label>
+                    <textarea name="area_description" id="edit-description" class="form-input" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">الحالة</label>
+                    <select name="is_active" id="edit-status" class="form-input">
+                        <option value="true">نشطة</option>
+                        <option value="false">غير نشطة</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+    let allRegions = [];
+    let allBranches = [];
+    let allStaff = [];
+
+    async function loadRegions() {
+        const container = document.getElementById('regions-content');
+        const user = TokenManager.getUser();
+
+        // Only owner and executive manager can see this page
+        if (!isTopLevel()) {
+            container.innerHTML = `
+                <div class="alert alert-warning">
+                    <p>ليس لديك صلاحية لعرض هذه الصفحة</p>
+                    <a href="/merchant" class="btn btn-primary mt-4">العودة للرئيسية</a>
+                </div>
+            `;
+            return;
+        }
+
+        try {
+            // Load data
+            const [regionsRes, branchesRes, staffRes] = await Promise.all([
+                API.merchant.getRegions(),
+                API.merchant.getBranches(),
+                API.merchant.getStaff()
+            ]);
+
+            allRegions = regionsRes.data?.data?.regions || [];
+            allBranches = branchesRes.data?.data?.branches || [];
+            allStaff = staffRes.data?.data?.staff || [];
+
+            container.innerHTML = `
+                <!-- Page Header -->
+                <div class="page-header flex justify-between items-center mb-6">
+                    <div>
+                        <h1 class="page-title">المناطق والفروع</h1>
+                        <p class="text-muted">إدارة المناطق الجغرافية وتوزيع الفروع</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="openAddModal()">
+                        <span>➕</span> إضافة منطقة
+                    </button>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="grid grid-3 mb-6">
+                    <div class="stat-card teal">
+                        <div class="stat-card-header">
+                            <span>المناطق</span>
+                            <span style="font-size: 2rem;">🗺️</span>
+                        </div>
+                        <div class="stat-card-value">${allRegions.filter(r => r.is_active).length}</div>
+                        <div class="stat-card-label">منطقة نشطة</div>
+                    </div>
+                    <div class="stat-card emerald">
+                        <div class="stat-card-header">
+                            <span>الفروع</span>
+                            <span style="font-size: 2rem;">🏪</span>
+                        </div>
+                        <div class="stat-card-value">${allBranches.filter(b => b.is_active).length}</div>
+                        <div class="stat-card-label">فرع نشط</div>
+                    </div>
+                    <div class="stat-card amber">
+                        <div class="stat-card-header">
+                            <span>مدراء المناطق</span>
+                            <span style="font-size: 2rem;">👤</span>
+                        </div>
+                        <div class="stat-card-value">${allStaff.filter(s => s.role === 'region_manager').length}</div>
+                        <div class="stat-card-label">مدير منطقة</div>
+                    </div>
+                </div>
+
+                <!-- Regions List -->
+                <div id="regions-list">
+                    ${renderRegions()}
+                </div>
+            `;
+
+        } catch (error) {
+            console.error('Error loading regions:', error);
+            showError(container, 'حدث خطأ في تحميل البيانات');
+        }
+    }
+
+    function renderRegions() {
+        if (allRegions.length === 0) {
+            return `
+                <div class="card text-center p-6">
+                    <span style="font-size: 3rem;">🗺️</span>
+                    <p class="mt-4 text-muted">لا توجد مناطق حتى الآن</p>
+                    <button class="btn btn-primary mt-4" onclick="openAddModal()">إضافة أول منطقة</button>
+                </div>
+            `;
+        }
+
+        return allRegions.map(region => {
+            const regionBranches = allBranches.filter(b => b.region_id === region.id);
+            const regionManager = allStaff.find(s => s.role === 'region_manager' && s.region_id === region.id);
+            const totalStaff = allStaff.filter(s => s.region_id === region.id || regionBranches.some(b => b.id === s.branch_id)).length;
+
+            return `
+                <div class="region-card card mb-4">
+                    <div class="region-header">
+                        <div class="region-info">
+                            <div class="region-icon">🗺️</div>
+                            <div>
+                                <h3 class="region-name">${region.name_ar}</h3>
+                                <div class="region-meta">
+                                    ${region.city ? `<span class="meta-item">📍 ${region.city}</span>` : ''}
+                                    <span class="meta-item">🏪 ${regionBranches.length} فرع</span>
+                                    <span class="meta-item">👥 ${totalStaff} موظف</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="region-actions">
+                            <span class="badge ${region.is_active ? 'badge-success' : 'badge-gray'}">
+                                ${region.is_active ? 'نشطة' : 'غير نشطة'}
+                            </span>
+                            <button class="btn btn-sm btn-secondary" onclick="editRegion('${region.id}')">تعديل</button>
+                        </div>
+                    </div>
+
+                    ${regionManager ? `
+                    <div class="region-manager">
+                        <div class="manager-avatar">${regionManager.full_name?.charAt(0) || '?'}</div>
+                        <div class="manager-info">
+                            <div class="manager-name">${regionManager.full_name}</div>
+                            <div class="manager-role">مدير المنطقة</div>
+                        </div>
+                    </div>
+                    ` : `
+                    <div class="region-manager no-manager">
+                        <span class="text-muted">لا يوجد مدير منطقة معين</span>
+                        <a href="/merchant/team" class="btn btn-sm btn-primary">تعيين مدير</a>
+                    </div>
+                    `}
+
+                    ${regionBranches.length > 0 ? `
+                    <div class="region-branches">
+                        <div class="branches-header">
+                            <span class="branches-title">الفروع</span>
+                            <a href="/merchant/branches?region=${region.id}" class="text-primary text-sm">عرض الكل</a>
+                        </div>
+                        <div class="branches-grid">
+                            ${regionBranches.slice(0, 4).map(branch => {
+                                const branchManager = allStaff.find(s => s.role === 'branch_manager' && s.branch_id === branch.id);
+                                const cashierCount = allStaff.filter(s => s.role === 'cashier' && s.branch_id === branch.id).length;
+                                return `
+                                    <div class="branch-item">
+                                        <div class="branch-icon">🏪</div>
+                                        <div class="branch-info">
+                                            <div class="branch-name">${branch.name_ar}</div>
+                                            <div class="branch-meta">
+                                                ${branchManager ? branchManager.full_name : 'بدون مدير'}
+                                                • ${cashierCount} كاشير
+                                            </div>
+                                        </div>
+                                        <span class="badge ${branch.is_active ? 'badge-success' : 'badge-gray'} text-xs">
+                                            ${branch.is_active ? 'نشط' : 'غير نشط'}
+                                        </span>
+                                    </div>
+                                `;
+                            }).join('')}
+                            ${regionBranches.length > 4 ? `
+                                <div class="branch-item more-branches">
+                                    <span>+${regionBranches.length - 4} فروع أخرى</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    ` : `
+                    <div class="region-branches empty">
+                        <span class="text-muted">لا توجد فروع في هذه المنطقة</span>
+                        <a href="/merchant/branches" class="btn btn-sm btn-primary">إضافة فرع</a>
+                    </div>
+                    `}
+                </div>
+            `;
+        }).join('');
+    }
+
+    function openAddModal() {
+        document.getElementById('add-region-modal').classList.remove('hidden');
+    }
+
+    function closeAddModal() {
+        document.getElementById('add-region-modal').classList.add('hidden');
+        document.getElementById('add-region-form').reset();
+    }
+
+    async function handleAddRegion(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+
+        const data = {
+            name_ar: formData.get('name_ar'),
+            name_en: formData.get('name_en'),
+            city: formData.get('city'),
+            area_description: formData.get('area_description'),
+        };
+
+        try {
+            const res = await API.merchant.createRegion(data);
+            if (res.success) {
+                closeAddModal();
+                loadRegions();
+                alert('تم إضافة المنطقة بنجاح');
+            } else {
+                alert(res.data?.message || 'حدث خطأ');
+            }
+        } catch (error) {
+            console.error('Error adding region:', error);
+            alert('حدث خطأ في إضافة المنطقة');
+        }
+    }
+
+    function editRegion(regionId) {
+        const region = allRegions.find(r => r.id === regionId);
+        if (!region) return;
+
+        document.getElementById('edit-region-id').value = region.id;
+        document.getElementById('edit-name-ar').value = region.name_ar || '';
+        document.getElementById('edit-name-en').value = region.name_en || '';
+        document.getElementById('edit-city').value = region.city || '';
+        document.getElementById('edit-description').value = region.area_description || '';
+        document.getElementById('edit-status').value = region.is_active ? 'true' : 'false';
+
+        document.getElementById('edit-region-modal').classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+        document.getElementById('edit-region-modal').classList.add('hidden');
+    }
+
+    async function handleEditRegion(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+        const regionId = formData.get('region_id');
+
+        const data = {
+            name_ar: formData.get('name_ar'),
+            name_en: formData.get('name_en'),
+            city: formData.get('city'),
+            area_description: formData.get('area_description'),
+            is_active: formData.get('is_active') === 'true',
+        };
+
+        try {
+            const res = await API.merchant.updateRegion(regionId, data);
+            if (res.success) {
+                closeEditModal();
+                loadRegions();
+                alert('تم تحديث المنطقة بنجاح');
+            } else {
+                alert(res.data?.message || 'حدث خطأ');
+            }
+        } catch (error) {
+            console.error('Error updating region:', error);
+            alert('حدث خطأ في تحديث المنطقة');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadRegions);
+</script>
+
+<style>
+    .page-title {
+        font-size: 1.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .region-card {
+        border: 1px solid var(--gray-200);
+        transition: all 0.3s ease;
+    }
+
+    .region-card:hover {
+        border-color: var(--teal-300);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .region-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--gray-200);
+        margin-bottom: 1rem;
+    }
+
+    .region-info {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .region-icon {
+        font-size: 2rem;
+        background: var(--teal-50);
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-lg);
+    }
+
+    .region-name {
+        font-size: 1.25rem;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .region-meta {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .meta-item {
+        font-size: 0.875rem;
+        color: var(--gray-500);
+    }
+
+    .region-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .region-manager {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        background: var(--gray-50);
+        border-radius: var(--radius-lg);
+        margin-bottom: 1rem;
+    }
+
+    .region-manager.no-manager {
+        justify-content: space-between;
+    }
+
+    .manager-avatar {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, var(--teal-400), var(--teal-500));
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+    }
+
+    .manager-name {
+        font-weight: 600;
+    }
+
+    .manager-role {
+        font-size: 0.75rem;
+        color: var(--gray-500);
+    }
+
+    .region-branches {
+        padding: 1rem;
+        background: var(--gray-50);
+        border-radius: var(--radius-lg);
+    }
+
+    .region-branches.empty {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .branches-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .branches-title {
+        font-weight: 600;
+        color: var(--gray-700);
+    }
+
+    .branches-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+
+    @media (max-width: 768px) {
+        .branches-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .branch-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: white;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--gray-200);
+    }
+
+    .branch-item.more-branches {
+        justify-content: center;
+        color: var(--gray-500);
+        font-size: 0.875rem;
+    }
+
+    .branch-icon {
+        font-size: 1.25rem;
+    }
+
+    .branch-info {
+        flex: 1;
+    }
+
+    .branch-name {
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+
+    .branch-meta {
+        font-size: 0.75rem;
+        color: var(--gray-500);
+    }
+
+    /* Modal Styles */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal.hidden {
+        display: none !important;
+    }
+
+    .modal-backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-content {
+        position: relative;
+        background: white;
+        border-radius: var(--radius-2xl);
+        width: 100%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: var(--shadow-xl);
+    }
+
+    .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.5rem;
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .modal-header h3 {
+        margin: 0;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--gray-500);
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--gray-200);
+    }
+
+    .text-xs {
+        font-size: 0.65rem;
+    }
+</style>
+{% endblock %}

@@ -643,7 +643,7 @@ class MerchantService:
                 }
 
         # Validate role
-        valid_roles = ['owner', 'general_manager', 'region_manager', 'branch_manager', 'cashier']
+        valid_roles = ['owner', 'executive_manager', 'region_manager', 'branch_manager', 'cashier']
         role = data.get('role', 'cashier')
         if role not in valid_roles:
             return {
@@ -684,6 +684,29 @@ class MerchantService:
                 'message': f'Failed to create staff member: {str(e)}',
                 'error_code': 'SYS_001'
             }
+
+    @staticmethod
+    def get_staff_member(merchant_id, staff_id):
+        """Get a single staff member's details"""
+        user = MerchantUser.query.filter_by(id=staff_id, merchant_id=merchant_id).first()
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'Staff member not found',
+                'error_code': 'MERCH_006'
+            }
+
+        user_dict = user.to_dict()
+        user_dict['branch'] = user.branch.to_dict() if user.branch else None
+        user_dict['region'] = user.region.to_dict() if user.region else None
+
+        return {
+            'success': True,
+            'data': {
+                'staff': user_dict
+            }
+        }
 
     @staticmethod
     def update_staff(merchant_id, staff_id, data):
@@ -727,7 +750,7 @@ class MerchantService:
 
         # Validate role if changing
         if 'role' in data:
-            valid_roles = ['owner', 'general_manager', 'region_manager', 'branch_manager', 'cashier']
+            valid_roles = ['owner', 'executive_manager', 'region_manager', 'branch_manager', 'cashier']
             if data['role'] not in valid_roles:
                 return {
                     'success': False,

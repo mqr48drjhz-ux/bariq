@@ -220,6 +220,21 @@ def create_staff():
     return jsonify(result), 201
 
 
+@merchants_bp.route('/me/staff/<staff_id>', methods=['GET'])
+@jwt_required()
+def get_staff_member(staff_id):
+    """Get staff member details"""
+    from app.services.merchant_service import MerchantService
+
+    identity = current_user
+    result = MerchantService.get_staff_member(identity['merchant_id'], staff_id)
+
+    if not result['success']:
+        return jsonify(result), 404
+
+    return jsonify(result)
+
+
 @merchants_bp.route('/me/staff/<staff_id>', methods=['PUT'])
 @jwt_required()
 def update_staff(staff_id):

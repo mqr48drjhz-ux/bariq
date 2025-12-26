@@ -94,3 +94,21 @@ def merchant_branches():
 def merchant_settlements():
     """Merchant settlements page"""
     return render_template('merchant/settlements.html', active_page='settlements')
+
+
+@frontend_bp.route('/merchant/reports')
+def merchant_reports():
+    """Merchant reports page"""
+    return render_template('merchant/reports.html', active_page='reports')
+
+
+@frontend_bp.route('/merchant/team')
+def merchant_team():
+    """Merchant team/staff hierarchy page"""
+    return render_template('merchant/team.html', active_page='team')
+
+
+@frontend_bp.route('/merchant/regions')
+def merchant_regions():
+    """Merchant regions page"""
+    return render_template('merchant/regions.html', active_page='regions')

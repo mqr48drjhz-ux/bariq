@@ -1,0 +1,643 @@
+{% extends "merchant/layout.html" %}
+
+{% block title %}التقارير - التاجر{% endblock %}
+
+{% block page_content %}
+<div id="reports-content">
+    <div class="loading-container">
+        <div class="spinner"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+    let currentPeriod = 'daily';
+    let currentReportType = 'transactions';
+
+    async function loadReports() {
+        const container = document.getElementById('reports-content');
+        const user = TokenManager.getUser();
+        const role = user?.role || 'cashier';
+
+        container.innerHTML = `
+            <!-- Page Header -->
+            <div class="page-header mb-6">
+                <h1 class="page-title">التقارير والإحصائيات</h1>
+                <p class="text-muted">عرض وتحليل أداء المعاملات والموظفين</p>
+            </div>
+
+            <!-- Period Selector -->
+            <div class="card mb-6">
+                <div class="period-selector">
+                    <button class="period-btn active" data-period="daily">يومي</button>
+                    <button class="period-btn" data-period="weekly">أسبوعي</button>
+                    <button class="period-btn" data-period="monthly">شهري</button>
+                </div>
+
+                <!-- Date Range -->
+                <div class="date-range mt-4">
+                    <div class="form-group" style="display: inline-block; margin-left: 1rem;">
+                        <label class="form-label">من تاريخ</label>
+                        <input type="date" id="from-date" class="form-input" style="width: auto;">
+                    </div>
+                    <div class="form-group" style="display: inline-block;">
+                        <label class="form-label">إلى تاريخ</label>
+                        <input type="date" id="to-date" class="form-input" style="width: auto;">
+                    </div>
+                    <button class="btn btn-primary" onclick="applyDateFilter()" style="margin-right: 1rem;">تطبيق</button>
+                </div>
+
+                ${role !== 'cashier' && role !== 'branch_manager' ? `
+                <!-- Branch/Region Filter -->
+                <div class="filter-row mt-4">
+                    ${isTopLevel() ? `
+                    <div class="form-group" style="display: inline-block; margin-left: 1rem;">
+                        <label class="form-label">المنطقة</label>
+                        <select id="region-filter" class="form-input" style="width: auto;" onchange="onRegionChange()">
+                            <option value="">جميع المناطق</option>
+                        </select>
+                    </div>
+                    ` : ''}
+                    <div class="form-group" style="display: inline-block;">
+                        <label class="form-label">الفرع</label>
+                        <select id="branch-filter" class="form-input" style="width: auto;">
+                            <option value="">جميع الفروع</option>
+                        </select>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+
+            <!-- Report Tabs -->
+            <div class="tabs mb-6">
+                <button class="tab active" data-type="transactions">المعاملات</button>
+                ${canManageStaff() ? '<button class="tab" data-type="staff">أداء الموظفين</button>' : ''}
+                <button class="tab" data-type="settlements">التسويات</button>
+                <button class="tab" data-type="customers">العملاء</button>
+            </div>
+
+            <!-- Summary Cards -->
+            <div id="summary-cards" class="grid grid-4 mb-6">
+                <div class="stat-card teal">
+                    <div class="stat-card-header">
+                        <span>إجمالي المبيعات</span>
+                        <span style="font-size: 2rem;">💰</span>
+                    </div>
+                    <div class="stat-card-value" id="total-sales">-</div>
+                    <div class="stat-card-label">ريال</div>
+                </div>
+                <div class="stat-card emerald">
+                    <div class="stat-card-header">
+                        <span>عدد المعاملات</span>
+                        <span style="font-size: 2rem;">📋</span>
+                    </div>
+                    <div class="stat-card-value" id="total-transactions">-</div>
+                    <div class="stat-card-label">معاملة</div>
+                </div>
+                <div class="stat-card amber">
+                    <div class="stat-card-header">
+                        <span>متوسط المعاملة</span>
+                        <span style="font-size: 2rem;">📊</span>
+                    </div>
+                    <div class="stat-card-value" id="avg-transaction">-</div>
+                    <div class="stat-card-label">ريال</div>
+                </div>
+                <div class="stat-card blue">
+                    <div class="stat-card-header">
+                        <span>العملاء</span>
+                        <span style="font-size: 2rem;">👥</span>
+                    </div>
+                    <div class="stat-card-value" id="unique-customers">-</div>
+                    <div class="stat-card-label">عميل</div>
+                </div>
+            </div>
+
+            <!-- Report Content -->
+            <div id="report-content" class="card">
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        `;
+
+        // Set default dates
+        const today = new Date();
+        const fromDate = new Date(today);
+        fromDate.setDate(today.getDate() - 7);
+
+        document.getElementById('to-date').value = today.toISOString().split('T')[0];
+        document.getElementById('from-date').value = fromDate.toISOString().split('T')[0];
+
+        // Load filters
+        if (role !== 'cashier' && role !== 'branch_manager') {
+            await loadFilters();
+        }
+
+        // Add event listeners
+        document.querySelectorAll('.period-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentPeriod = btn.dataset.period;
+                updateDateRange(currentPeriod);
+                loadReportData();
+            });
+        });
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentReportType = tab.dataset.type;
+                loadReportData();
+            });
+        });
+
+        // Load initial data
+        loadReportData();
+    }
+
+    function updateDateRange(period) {
+        const today = new Date();
+        const fromDate = new Date(today);
+
+        switch (period) {
+            case 'daily':
+                // Today only
+                document.getElementById('from-date').value = today.toISOString().split('T')[0];
+                break;
+            case 'weekly':
+                fromDate.setDate(today.getDate() - 7);
+                document.getElementById('from-date').value = fromDate.toISOString().split('T')[0];
+                break;
+            case 'monthly':
+                fromDate.setMonth(today.getMonth() - 1);
+                document.getElementById('from-date').value = fromDate.toISOString().split('T')[0];
+                break;
+        }
+        document.getElementById('to-date').value = today.toISOString().split('T')[0];
+    }
+
+    async function loadFilters() {
+        try {
+            if (isTopLevel()) {
+                const regionsRes = await API.merchant.getRegions();
+                const regions = regionsRes.data?.data?.regions || [];
+                const regionSelect = document.getElementById('region-filter');
+                if (regionSelect) {
+                    regions.forEach(r => {
+                        const option = document.createElement('option');
+                        option.value = r.id;
+                        option.textContent = r.name_ar;
+                        regionSelect.appendChild(option);
+                    });
+                }
+            }
+
+            const branchesRes = await API.merchant.getBranches();
+            const branches = branchesRes.data?.data?.branches || [];
+            const branchSelect = document.getElementById('branch-filter');
+            if (branchSelect) {
+                branches.forEach(b => {
+                    const option = document.createElement('option');
+                    option.value = b.id;
+                    option.textContent = b.name_ar;
+                    option.dataset.regionId = b.region_id;
+                    branchSelect.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Error loading filters:', error);
+        }
+    }
+
+    function onRegionChange() {
+        const regionId = document.getElementById('region-filter')?.value;
+        const branchSelect = document.getElementById('branch-filter');
+        if (!branchSelect) return;
+
+        // Filter branches by region
+        Array.from(branchSelect.options).forEach(opt => {
+            if (opt.value === '') {
+                opt.style.display = '';
+            } else if (!regionId || opt.dataset.regionId === regionId) {
+                opt.style.display = '';
+            } else {
+                opt.style.display = 'none';
+            }
+        });
+        branchSelect.value = '';
+    }
+
+    function applyDateFilter() {
+        loadReportData();
+    }
+
+    async function loadReportData() {
+        const container = document.getElementById('report-content');
+        container.innerHTML = '<div class="loading-container"><div class="spinner"></div></div>';
+
+        const params = {
+            from_date: document.getElementById('from-date')?.value,
+            to_date: document.getElementById('to-date')?.value,
+            period: currentPeriod,
+        };
+
+        const branchFilter = document.getElementById('branch-filter')?.value;
+        if (branchFilter) params.branch_id = branchFilter;
+
+        const regionFilter = document.getElementById('region-filter')?.value;
+        if (regionFilter) params.region_id = regionFilter;
+
+        try {
+            // Load summary data
+            const summaryRes = await API.merchant.getDashboard();
+            const summary = summaryRes.data?.data || {};
+
+            document.getElementById('total-sales').textContent = formatNumber(summary.total_sales || 0);
+            document.getElementById('total-transactions').textContent = summary.confirmed_transactions || 0;
+            document.getElementById('avg-transaction').textContent = formatNumber(summary.average_transaction || 0);
+            document.getElementById('unique-customers').textContent = summary.unique_customers || 0;
+
+            // Load report-specific data
+            switch (currentReportType) {
+                case 'transactions':
+                    await loadTransactionsReport(container, params);
+                    break;
+                case 'staff':
+                    await loadStaffReport(container, params);
+                    break;
+                case 'settlements':
+                    await loadSettlementsReport(container, params);
+                    break;
+                case 'customers':
+                    await loadCustomersReport(container, params);
+                    break;
+            }
+        } catch (error) {
+            console.error('Error loading report:', error);
+            container.innerHTML = '<div class="alert alert-error">حدث خطأ في تحميل التقرير</div>';
+        }
+    }
+
+    async function loadTransactionsReport(container, params) {
+        const res = await API.merchant.getTransactions({ ...params, per_page: 50 });
+        const transactions = res.data?.data?.transactions || [];
+
+        if (transactions.length === 0) {
+            container.innerHTML = `
+                <div class="text-center p-6 text-muted">
+                    <span style="font-size: 3rem;">📭</span>
+                    <p class="mt-4">لا توجد معاملات في هذه الفترة</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Group by date
+        const grouped = {};
+        transactions.forEach(txn => {
+            const date = txn.transaction_date?.split('T')[0] || 'unknown';
+            if (!grouped[date]) grouped[date] = { count: 0, total: 0, transactions: [] };
+            grouped[date].count++;
+            grouped[date].total += txn.total_amount || 0;
+            grouped[date].transactions.push(txn);
+        });
+
+        container.innerHTML = `
+            <div class="card-header">
+                <h3 style="margin: 0;">تقرير المعاملات</h3>
+                <span class="text-muted">${transactions.length} معاملة</span>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>عدد المعاملات</th>
+                            <th>الإجمالي</th>
+                            <th>المتوسط</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${Object.entries(grouped).map(([date, data]) => `
+                            <tr>
+                                <td>${formatDate(date)}</td>
+                                <td>${data.count}</td>
+                                <td class="font-bold">${formatNumber(data.total)} ريال</td>
+                                <td>${formatNumber(data.total / data.count)} ريال</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    async function loadStaffReport(container, params) {
+        const res = await API.merchant.getStaff();
+        const staff = res.data?.data?.staff || [];
+
+        // Get transactions to calculate performance
+        const txnRes = await API.merchant.getTransactions({ ...params, per_page: 1000 });
+        const transactions = txnRes.data?.data?.transactions || [];
+
+        // Calculate per-staff metrics
+        const staffMetrics = {};
+        staff.forEach(s => {
+            staffMetrics[s.id] = { name: s.full_name, role: s.role, count: 0, total: 0 };
+        });
+
+        transactions.forEach(txn => {
+            if (txn.cashier_id && staffMetrics[txn.cashier_id]) {
+                staffMetrics[txn.cashier_id].count++;
+                staffMetrics[txn.cashier_id].total += txn.total_amount || 0;
+            }
+        });
+
+        const staffList = Object.values(staffMetrics).filter(s => s.count > 0 || s.role === 'cashier');
+        staffList.sort((a, b) => b.total - a.total);
+
+        if (staffList.length === 0) {
+            container.innerHTML = `
+                <div class="text-center p-6 text-muted">
+                    <span style="font-size: 3rem;">👥</span>
+                    <p class="mt-4">لا توجد بيانات أداء للموظفين</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="card-header">
+                <h3 style="margin: 0;">أداء الموظفين</h3>
+                <span class="text-muted">${staffList.length} موظف</span>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>الموظف</th>
+                            <th>الوظيفة</th>
+                            <th>عدد المعاملات</th>
+                            <th>إجمالي المبيعات</th>
+                            <th>المتوسط</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${staffList.map(s => `
+                            <tr>
+                                <td class="font-bold">${s.name}</td>
+                                <td><span class="badge badge-info">${roleNamesAr[s.role] || s.role}</span></td>
+                                <td>${s.count}</td>
+                                <td class="font-bold">${formatNumber(s.total)} ريال</td>
+                                <td>${s.count > 0 ? formatNumber(s.total / s.count) : 0} ريال</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    async function loadSettlementsReport(container, params) {
+        const res = await API.merchant.getSettlements(params);
+        const settlements = res.data?.data?.settlements || [];
+
+        if (settlements.length === 0) {
+            container.innerHTML = `
+                <div class="text-center p-6 text-muted">
+                    <span style="font-size: 3rem;">💰</span>
+                    <p class="mt-4">لا توجد تسويات في هذه الفترة</p>
+                </div>
+            `;
+            return;
+        }
+
+        const totalGross = settlements.reduce((sum, s) => sum + (s.gross_amount || 0), 0);
+        const totalCommission = settlements.reduce((sum, s) => sum + (s.commission_amount || 0), 0);
+        const totalNet = settlements.reduce((sum, s) => sum + (s.net_amount || 0), 0);
+
+        container.innerHTML = `
+            <div class="card-header">
+                <h3 style="margin: 0;">تقرير التسويات</h3>
+                <span class="text-muted">${settlements.length} تسوية</span>
+            </div>
+
+            <div class="grid grid-3 mb-6 p-4">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-primary">${formatNumber(totalGross)}</div>
+                    <div class="text-muted">إجمالي المبيعات</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-danger">${formatNumber(totalCommission)}</div>
+                    <div class="text-muted">العمولة</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-success">${formatNumber(totalNet)}</div>
+                    <div class="text-muted">صافي التحويل</div>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>رقم التسوية</th>
+                            <th>الفترة</th>
+                            <th>الإجمالي</th>
+                            <th>العمولة</th>
+                            <th>الصافي</th>
+                            <th>الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${settlements.map(s => `
+                            <tr>
+                                <td style="direction: ltr;">${s.reference_number || '-'}</td>
+                                <td>${formatDate(s.period_start)} - ${formatDate(s.period_end)}</td>
+                                <td>${formatNumber(s.gross_amount)} ريال</td>
+                                <td class="text-danger">${formatNumber(s.commission_amount)} ريال</td>
+                                <td class="font-bold">${formatNumber(s.net_amount)} ريال</td>
+                                <td><span class="badge ${getSettlementBadgeClass(s.status)}">${getSettlementLabel(s.status)}</span></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    async function loadCustomersReport(container, params) {
+        const res = await API.merchant.getTransactions({ ...params, per_page: 1000 });
+        const transactions = res.data?.data?.transactions || [];
+
+        // Group by customer
+        const customers = {};
+        transactions.forEach(txn => {
+            const customerId = txn.customer_id;
+            if (!customerId) return;
+            if (!customers[customerId]) {
+                customers[customerId] = {
+                    name: txn.customer?.full_name_ar || 'عميل',
+                    count: 0,
+                    total: 0,
+                    lastVisit: txn.transaction_date
+                };
+            }
+            customers[customerId].count++;
+            customers[customerId].total += txn.total_amount || 0;
+            if (txn.transaction_date > customers[customerId].lastVisit) {
+                customers[customerId].lastVisit = txn.transaction_date;
+            }
+        });
+
+        const customerList = Object.values(customers);
+        customerList.sort((a, b) => b.total - a.total);
+
+        if (customerList.length === 0) {
+            container.innerHTML = `
+                <div class="text-center p-6 text-muted">
+                    <span style="font-size: 3rem;">👥</span>
+                    <p class="mt-4">لا توجد بيانات عملاء في هذه الفترة</p>
+                </div>
+            `;
+            return;
+        }
+
+        const repeatCustomers = customerList.filter(c => c.count > 1).length;
+
+        container.innerHTML = `
+            <div class="card-header">
+                <h3 style="margin: 0;">تحليل العملاء</h3>
+                <span class="text-muted">${customerList.length} عميل</span>
+            </div>
+
+            <div class="grid grid-3 mb-6 p-4">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-primary">${customerList.length}</div>
+                    <div class="text-muted">إجمالي العملاء</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-success">${repeatCustomers}</div>
+                    <div class="text-muted">عملاء متكررون</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-info">${Math.round((repeatCustomers / customerList.length) * 100)}%</div>
+                    <div class="text-muted">نسبة الاحتفاظ</div>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>العميل</th>
+                            <th>عدد الزيارات</th>
+                            <th>إجمالي المشتريات</th>
+                            <th>المتوسط</th>
+                            <th>آخر زيارة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${customerList.slice(0, 20).map(c => `
+                            <tr>
+                                <td class="font-bold">${c.name}</td>
+                                <td>${c.count}</td>
+                                <td class="font-bold">${formatNumber(c.total)} ريال</td>
+                                <td>${formatNumber(c.total / c.count)} ريال</td>
+                                <td>${formatDate(c.lastVisit)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function getSettlementBadgeClass(status) {
+        const classes = {
+            'open': 'badge-info',
+            'closed': 'badge-warning',
+            'approved': 'badge-success',
+            'transferred': 'badge-success',
+            'completed': 'badge-success',
+        };
+        return classes[status] || 'badge-gray';
+    }
+
+    function getSettlementLabel(status) {
+        const labels = {
+            'open': 'مفتوحة',
+            'closed': 'مغلقة',
+            'approved': 'معتمدة',
+            'transferred': 'محولة',
+            'completed': 'مكتملة',
+        };
+        return labels[status] || status;
+    }
+
+    document.addEventListener('DOMContentLoaded', loadReports);
+</script>
+
+<style>
+    .page-header {
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .period-selector {
+        display: flex;
+        gap: 0.5rem;
+        background: var(--gray-100);
+        padding: 0.25rem;
+        border-radius: var(--radius-xl);
+        width: fit-content;
+    }
+
+    .period-btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: transparent;
+        border-radius: var(--radius-lg);
+        font-family: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        color: var(--gray-500);
+    }
+
+    .period-btn.active {
+        background: linear-gradient(135deg, var(--teal-500), var(--teal-600));
+        color: white;
+        box-shadow: var(--shadow);
+    }
+
+    .period-btn:hover:not(.active) {
+        background: white;
+        color: var(--gray-700);
+    }
+
+    .date-range {
+        display: flex;
+        align-items: flex-end;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .filter-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+</style>
+{% endblock %}

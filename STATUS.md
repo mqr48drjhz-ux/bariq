@@ -1,8 +1,8 @@
-# Bariq Web App - Project Status (December 23, 2025)
+# Bariq Web App - Project Status (December 26, 2025)
 
-## Current State: MVP Ready for Testing
+## Current State: MVP Ready for Testing with Full Role Hierarchy
 
-The application is now functional with complete customer and merchant portals.
+The application is now functional with complete customer and merchant portals, including a full hierarchical staff management system.
 
 ---
 
@@ -12,6 +12,7 @@ The application is now functional with complete customer and merchant portals.
 - JWT Authentication (Customer, Merchant, Admin)
 - Customer CRUD + Credit Management
 - Merchant CRUD + Branch/Staff Management
+- **NEW: Full Staff Role Hierarchy** (Owner, Executive Manager, Region Manager, Branch Manager, Cashier)
 - Transaction Creation & Confirmation Flow
 - Payment Processing
 - Settlement Tracking
@@ -38,41 +39,114 @@ The application is now functional with complete customer and merchant portals.
 #### Merchant Portal
 | Page | URL | Status |
 |------|-----|--------|
-| Dashboard | `/merchant` | Complete |
+| Dashboard | `/merchant` | Complete (Role-Based) |
+| Reports | `/merchant/reports` | **NEW** - Complete |
+| Team/Staff Hierarchy | `/merchant/team` | **NEW** - Complete |
+| Regions | `/merchant/regions` | **NEW** - Complete |
 | New Transaction | `/merchant/new-transaction` | Complete |
 | Transactions | `/merchant/transactions` | Complete |
 | Settlements | `/merchant/settlements` | Complete |
-| Staff | `/merchant/staff` | Complete |
 | Branches | `/merchant/branches` | Complete |
+
+---
+
+## Staff Role Hierarchy
+
+The merchant portal now supports a complete organizational hierarchy:
+
+```
+Owner (المالك)
+├── Executive Manager (المدير التنفيذي) - Same permissions as Owner
+│   ├── Can see ALL regions and branches
+│   ├── Can manage ALL staff
+│   └── Full reports access
+│
+├── Region Manager (مدير المنطقة)
+│   ├── Can see branches in their region only
+│   ├── Can manage staff in their region
+│   └── Reports for their region only
+│
+├── Branch Manager (مدير الفرع)
+│   ├── Can see their branch only
+│   ├── Can manage cashiers in their branch
+│   └── Reports for their branch only
+│
+└── Cashier (كاشير)
+    ├── Can create transactions
+    └── Can view their own transactions
+```
+
+### Role-Based Features
+- **Dynamic Navigation**: Each role sees only relevant menu items
+- **Role-Based Dashboard**: Custom welcome messages and quick actions per role
+- **Staff Hierarchy View**: Tree visualization + list view with filters
+- **Reports Page**: Daily/weekly/monthly reports with transactions, staff performance, settlements, and customer analytics
 
 ---
 
 ## Test Credentials
 
-| Role | Username/Email | Password |
-|------|----------------|----------|
-| Customer | `ahmed_ali` | `Customer@123` |
-| Merchant Owner | `owner@albaraka.sa` | `Owner@123` |
-| Merchant Cashier | `cashier@albaraka.sa` | `Cashier@123` |
-| Admin | `admin@bariq.sa` | `Admin@123` |
+### Admin
+| Role | Email | Password |
+|------|-------|----------|
+| Super Admin | `admin@bariq.sa` | `Admin@123` |
 
-**Customer Bariq ID:** `123456` (for merchant lookup)
+### Customer
+| Username | Password | Bariq ID |
+|----------|----------|----------|
+| `ahmed_ali` | `Customer@123` | `123456` |
+
+### Merchant Staff
+| Role | Email | Password |
+|------|-------|----------|
+| Owner | `owner@albaraka.sa` | `Owner@123` |
+| Executive Manager | `exec@albaraka.sa` | `Exec@123` |
+| Region Manager (Riyadh) | `region.riyadh@albaraka.sa` | `Region@123` |
+| Region Manager (Jeddah) | `region.jeddah@albaraka.sa` | `Region@123` |
+| Branch Manager (Olaya) | `branch.olaya@albaraka.sa` | `Branch@123` |
+| Branch Manager (Malaz) | `branch.malaz@albaraka.sa` | `Branch@123` |
+| Branch Manager (Tahlia) | `branch.tahlia@albaraka.sa` | `Branch@123` |
+| Cashier | `cashier@albaraka.sa` | `Cashier@123` |
 
 ---
 
-## Latest Session Updates
+## Latest Session Updates (December 26, 2025)
 
-### Merchant Settlements Page - Complete Rewrite
-- Summary cards (total settlements, transferred, pending amounts)
-- Status filter tabs (All, Pending, Approved, Transferred)
-- Full data table with all settlement fields
-- Settlement details modal with breakdown
-- Fixed Settlement model `to_dict()` method
+### Full Staff Hierarchy Implementation
+- Added `executive_manager` role with same permissions as owner
+- Created role hierarchy constants in MerchantUser model
+- Helper methods for role-based access control
 
-### Bug Fixes
-- Modal CSS specificity issue (modals appearing on page load)
-- Added `.modal.hidden { display: none !important; }`
-- Added missing `getSettlementDetails()` API method
+### New Merchant Pages
+1. **Reports Page** (`/merchant/reports`)
+   - Period selector (daily/weekly/monthly)
+   - Date range filters
+   - Region/branch filters for managers
+   - Four report types: Transactions, Staff Performance, Settlements, Customer Analytics
+   - Summary cards with key metrics
+
+2. **Team Page** (`/merchant/team`)
+   - Tree view: Visual organizational hierarchy
+   - List view: Filterable table with search
+   - Add/Edit staff modals
+   - Role-based staff visibility
+
+3. **Regions Page** (`/merchant/regions`)
+   - Region cards with branch counts
+   - Region manager assignment display
+   - Branch listing per region
+   - Add/Edit region modals
+
+### Enhanced Dashboard
+- Role-based welcome messages
+- Custom quick actions per role
+- Team summary cards for managers
+- Scope badges for region/branch managers
+
+### API Updates
+- `GET /merchants/me/staff/<id>` - Get staff member details
+- Updated valid roles to include `executive_manager`
+- Role-based data filtering in staff queries
 
 ---
 
@@ -87,19 +161,27 @@ bariq/
 │   ├── api/v1/             # REST API endpoints
 │   │   ├── auth/           # Authentication
 │   │   ├── customers/      # Customer endpoints
-│   │   ├── merchants/      # Merchant endpoints
+│   │   ├── merchants/      # Merchant endpoints (updated)
 │   │   └── admin/          # Admin endpoints
-│   ├── models/             # SQLAlchemy models
+│   ├── models/
+│   │   └── merchant_user.py # Updated with role hierarchy
 │   ├── services/           # Business logic
 │   ├── static/
 │   │   ├── css/main.css    # Global styles
-│   │   └── js/api.js       # API helper + auth
-│   └── templates/          # Jinja2 HTML templates
-│       ├── base.html       # Base layout
-│       ├── customer/       # Customer portal
-│       └── merchant/       # Merchant portal
+│   │   └── js/api.js       # API helper (updated)
+│   ├── templates/
+│   │   ├── base.html       # Base layout
+│   │   ├── customer/       # Customer portal
+│   │   └── merchant/       # Merchant portal
+│   │       ├── layout.html     # Updated with dynamic nav
+│   │       ├── dashboard.html  # Role-based dashboard
+│   │       ├── reports.html    # NEW
+│   │       ├── team.html       # NEW
+│   │       └── regions.html    # NEW
+│   └── frontend/
+│       └── __init__.py     # Frontend routes (updated)
 ├── scripts/
-│   └── seed_data.py        # Database seeding
+│   └── seed_data.py        # Updated with full hierarchy
 └── migrations/             # Database migrations
 ```
 
@@ -115,6 +197,16 @@ python wsgi.py
 
 Server runs at: **http://localhost:5001**
 
+### To Reseed Database (for new staff hierarchy):
+```bash
+# Delete existing database
+rm -f app.db
+
+# Recreate and seed
+flask db upgrade
+python scripts/seed_data.py
+```
+
 ---
 
 ## Next Steps (Priority Order)
@@ -126,7 +218,6 @@ Create admin portal at `/admin` with:
 - Merchant management (approve, suspend merchants)
 - Transaction monitoring
 - Settlement approval workflow
-- System settings management
 
 ### 2. Customer Registration (High Priority)
 - Registration page with form
@@ -134,23 +225,21 @@ Create admin portal at `/admin` with:
 - OTP verification flow
 - Credit limit assignment
 
-### 3. Merchant Registration (Medium Priority)
-- Merchant signup form
-- Business verification process
-- Admin approval workflow
+### 3. Role-Based Data Filtering (Medium Priority)
+- Update transaction queries to filter by user's accessible branches
+- Update settlement queries for role-based access
+- API-level enforcement of role permissions
 
 ### 4. Enhanced Features (Medium Priority)
 - Notifications system (in-app + email)
 - Transaction history export (PDF/Excel)
-- Merchant analytics dashboard
-- Customer credit score display
+- Real-time transaction confirmation
 
 ### 5. Security & Production (Before Launch)
 - Input validation enhancement
 - Rate limiting
 - HTTPS setup
 - Environment variables for secrets
-- Database backup strategy
 
 ---
 
@@ -161,6 +250,7 @@ Create admin portal at `/admin` with:
 3. **No Email/SMS** - Notifications are in-app only
 4. **Mock Nafath** - No real Nafath integration yet
 5. **No Payment Gateway** - Payments are recorded but not processed
+6. **Role Filtering Partial** - Some queries don't fully filter by role at API level yet
 
 ---
 

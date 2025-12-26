@@ -187,35 +187,93 @@ const API = {
   merchant: {
     getProfile: () => apiRequest('/merchants/me'),
     getDashboard: () => apiRequest('/merchants/me/reports/summary'),
-    
+
     lookupCustomer: (bariqId) => apiRequest(`/merchants/customers/lookup/${bariqId}`),
-    
+
     getTransactions: (params = {}) => {
       const query = new URLSearchParams(params).toString();
       return apiRequest(`/merchants/me/transactions${query ? '?' + query : ''}`);
     },
-    
+
     createTransaction: (data) =>
       apiRequest('/merchants/me/transactions', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    
-    getBranches: () => apiRequest('/merchants/me/branches'),
-    getStaff: () => apiRequest('/merchants/me/staff'),
-    
+
+    // Regions
+    getRegions: () => apiRequest('/merchants/me/regions'),
+    createRegion: (data) =>
+      apiRequest('/merchants/me/regions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateRegion: (id, data) =>
+      apiRequest(`/merchants/me/regions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    deleteRegion: (id) =>
+      apiRequest(`/merchants/me/regions/${id}`, { method: 'DELETE' }),
+
+    // Branches
+    getBranches: (params = {}) => {
+      const query = new URLSearchParams(params).toString();
+      return apiRequest(`/merchants/me/branches${query ? '?' + query : ''}`);
+    },
+    createBranch: (data) =>
+      apiRequest('/merchants/me/branches', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateBranch: (id, data) =>
+      apiRequest(`/merchants/me/branches/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+
+    // Staff
+    getStaff: (params = {}) => {
+      const query = new URLSearchParams(params).toString();
+      return apiRequest(`/merchants/me/staff${query ? '?' + query : ''}`);
+    },
+    getStaffMember: (id) => apiRequest(`/merchants/me/staff/${id}`),
     addStaff: (data) =>
       apiRequest('/merchants/me/staff', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    
+    updateStaff: (id, data) =>
+      apiRequest(`/merchants/me/staff/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    getStaffHierarchy: () => apiRequest('/merchants/me/staff/hierarchy'),
+
+    // Settlements
     getSettlements: (params = {}) => {
       const query = new URLSearchParams(params).toString();
       return apiRequest(`/merchants/me/settlements${query ? '?' + query : ''}`);
     },
-
     getSettlementDetails: (id) => apiRequest(`/merchants/me/settlements/${id}`),
+
+    // Reports
+    getReports: (params = {}) => {
+      const query = new URLSearchParams(params).toString();
+      return apiRequest(`/merchants/me/reports/detailed${query ? '?' + query : ''}`);
+    },
+    getTransactionReports: (params = {}) => {
+      const query = new URLSearchParams(params).toString();
+      return apiRequest(`/merchants/me/reports/transactions${query ? '?' + query : ''}`);
+    },
+    getStaffPerformance: (params = {}) => {
+      const query = new URLSearchParams(params).toString();
+      return apiRequest(`/merchants/me/reports/staff-performance${query ? '?' + query : ''}`);
+    },
+    getCustomerAnalytics: (params = {}) => {
+      const query = new URLSearchParams(params).toString();
+      return apiRequest(`/merchants/me/reports/customers${query ? '?' + query : ''}`);
+    },
   },
 };
 
