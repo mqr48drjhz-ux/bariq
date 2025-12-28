@@ -540,3 +540,285 @@ def get_settlement(settlement_id):
         return jsonify(result), 404
 
     return jsonify(result)
+
+
+# ==================== Mobile App Endpoints ====================
+
+# -------- Staff Profile --------
+
+@merchants_bp.route('/me/profile', methods=['GET'])
+@jwt_required()
+def get_staff_profile():
+    """Get current staff member's profile (for mobile app)"""
+    from app.services.merchant_service import MerchantService
+
+    identity = current_user
+    result = MerchantService.get_staff_profile(identity['id'])
+
+    if not result['success']:
+        return jsonify(result), 404
+
+    return jsonify(result)
+
+
+@merchants_bp.route('/me/profile', methods=['PUT'])
+@jwt_required()
+def update_staff_profile():
+    """Update current staff member's profile"""
+    from app.services.merchant_service import MerchantService
+
+    identity = current_user
+    data = request.get_json()
+
+    result = MerchantService.update_staff_profile(identity['id'], data)
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    return jsonify(result)
+
+
+@merchants_bp.route('/me/profile/password', methods=['PUT'])
+@jwt_required()
+def change_staff_password():
+    """Change staff password"""
+    from app.services.merchant_service import MerchantService
+
+    identity = current_user
+    data = request.get_json()
+
+    if not data:
+        return jsonify({
+            'success': False,
+            'message': 'Request body is required',
+            'error_code': 'VAL_001'
+        }), 400
+
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+
+    if not current_password or not new_password:
+        return jsonify({
+            'success': False,
+            'message': 'Current password and new password are required',
+            'error_code': 'VAL_001'
+        }), 400
+
+    result = MerchantService.change_staff_password(
+        identity['id'],
+        current_password,
+        new_password
+    )
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    return jsonify(result)
+
+
+# -------- Mobile Dashboard --------
+
+@merchants_bp.route('/me/dashboard', methods=['GET'])
+@jwt_required()
+def get_mobile_dashboard():
+    """Get role-based dashboard data for mobile app"""
+    from app.services.merchant_service import MerchantService
+
+    identity = current_user
+
+    # Get optional filters
+    from_date = request.args.get('from_date')
+    to_date = request.args.get('to_date')
+
+    result = MerchantService.get_mobile_dashboard(
+        staff_id=identity['id'],
+        merchant_id=identity['merchant_id'],
+        from_date=from_date,
+        to_date=to_date
+    )
+
+    return jsonify(result)
+
+
+@merchants_bp.route('/me/quick-stats', methods=['GET'])
+@jwt_required()
+def get_quick_stats():
+    """Get quick stats based on role"""
+    from app.services.merchant_service import MerchantService
+
+    identity = current_user
+
+    result = MerchantService.get_role_based_stats(
+        staff_id=identity['id'],
+        merchant_id=identity['merchant_id']
+    )
+
+    return jsonify(result)
+
+
+# -------- Staff Notifications --------
+
+@merchants_bp.route('/me/notifications', methods=['GET'])
+@jwt_required()
+def get_staff_notifications():
+    """Get staff notifications"""
+    from app.services.notification_service import NotificationService
+
+    identity = current_user
+    unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+    page = request.args.get('page', 1, type=int)
+
+    result = NotificationService.get_merchant_staff_notifications(
+        identity['id'],
+        unread_only=unread_only,
+        page=page
+    )
+
+    return jsonify(result)
+
+
+@merchants_bp.route('/me/notifications/<notification_id>/read', methods=['PUT'])
+@jwt_required()
+def mark_staff_notification_read(notification_id):
+    """Mark notification as read"""
+    from app.services.notification_service import NotificationService
+
+    identity = current_user
+    result = NotificationService.mark_staff_notification_read(
+        identity['id'],
+        notification_id
+    )
+
+    return jsonify(result)
+
+
+@merchants_bp.route('/me/notifications/read-all', methods=['POST'])
+@jwt_required()
+def mark_all_staff_notifications_read():
+    """Mark all notifications as read"""
+    from app.services.notification_service import NotificationService
+
+    identity = current_user
+    result = NotificationService.mark_all_staff_notifications_read(identity['id'])
+
+    return jsonify(result)
+
+
+# -------- Device Registration (FCM) --------
+
+@merchants_bp.route('/me/devices', methods=['POST'])
+@jwt_required()
+def register_staff_device():
+    """Register device for push notifications"""
+    from app.services.notification_service import NotificationService
+
+    identity = current_user
+    data = request.get_json()
+
+    result = NotificationService.register_merchant_device(
+        staff_id=identity['id'],
+        fcm_token=data.get('fcm_token'),
+        device_type=data.get('device_type'),
+        device_name=data.get('device_name')
+    )
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    return jsonify(result), 201
+
+
+@merchants_bp.route('/me/devices/<device_id>', methods=['DELETE'])
+@jwt_required()
+def unregister_staff_device(device_id):
+    """Unregister device from push notifications"""
+    from app.services.notification_service import NotificationService
+
+    identity = current_user
+    result = NotificationService.unregister_merchant_device(identity['id'], device_id)
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    return jsonify(result)
+
+
+# -------- Role-Based Data Endpoints --------
+
+@merchants_bp.route('/me/accessible-branches', methods=['GET'])
+@jwt_required()
+def get_accessible_branches():
+    """Get branches accessible by current staff member"""
+    from app.services.merchant_service import MerchantService
+
+    identity = current_user
+    result = MerchantService.get_accessible_branches(identity['id'])
+
+    return jsonify(result)
+
+
+@merchants_bp.route('/me/accessible-regions', methods=['GET'])
+@jwt_required()
+def get_accessible_regions():
+    """Get regions accessible by current staff member"""
+    from app.services.merchant_service import MerchantService
+
+    identity = current_user
+    result = MerchantService.get_accessible_regions(identity['id'])
+
+    return jsonify(result)
+
+
+@merchants_bp.route('/me/team', methods=['GET'])
+@jwt_required()
+def get_my_team():
+    """Get staff members that current user can manage"""
+    from app.services.merchant_service import MerchantService
+
+    identity = current_user
+    result = MerchantService.get_subordinates(identity['id'])
+
+    return jsonify(result)
+
+
+# -------- Today's Activity (for Cashier/Branch Manager) --------
+
+@merchants_bp.route('/me/today', methods=['GET'])
+@jwt_required()
+def get_today_activity():
+    """Get today's activity summary"""
+    from app.services.merchant_service import MerchantService
+
+    identity = current_user
+    result = MerchantService.get_today_activity(
+        staff_id=identity['id'],
+        merchant_id=identity['merchant_id']
+    )
+
+    return jsonify(result)
+
+
+@merchants_bp.route('/me/my-transactions', methods=['GET'])
+@jwt_required()
+def get_my_transactions():
+    """Get transactions created by current staff member"""
+    from app.services.transaction_service import TransactionService
+
+    identity = current_user
+
+    status = request.args.get('status')
+    from_date = request.args.get('from_date')
+    to_date = request.args.get('to_date')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+
+    result = TransactionService.get_staff_transactions(
+        staff_id=identity['id'],
+        status=status,
+        from_date=from_date,
+        to_date=to_date,
+        page=page,
+        per_page=per_page
+    )
+
+    return jsonify(result)

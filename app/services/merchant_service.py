@@ -1257,3 +1257,503 @@ class MerchantService:
                 ]
             }
         }
+
+    # ==================== Mobile App Staff Methods ====================
+
+    @staticmethod
+    def get_staff_profile(staff_id):
+        """Get staff member's own profile for mobile app"""
+        from app.models.merchant_user import ROLE_NAMES_AR, ROLE_NAMES_EN
+
+        user = MerchantUser.query.get(staff_id)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'Staff member not found',
+                'error_code': 'MERCH_006'
+            }
+
+        merchant = Merchant.query.get(user.merchant_id)
+
+        profile_data = user.to_dict()
+        profile_data['branch'] = user.branch.to_dict() if user.branch else None
+        profile_data['region'] = user.region.to_dict() if user.region else None
+        profile_data['merchant'] = {
+            'id': merchant.id,
+            'name_ar': merchant.name_ar,
+            'name_en': merchant.name_en,
+            'business_type': merchant.business_type,
+            'logo_url': None
+        } if merchant else None
+
+        # Add role capabilities
+        profile_data['capabilities'] = {
+            'can_create_transactions': user.can_create_transactions(),
+            'can_manage_staff': user.can_manage_staff(),
+            'can_see_all_branches': user.can_see_all_branches(),
+            'can_see_all_regions': user.can_see_all_regions(),
+            'is_top_level': user.is_top_level()
+        }
+
+        return {
+            'success': True,
+            'data': {
+                'profile': profile_data
+            }
+        }
+
+    @staticmethod
+    def update_staff_profile(staff_id, data):
+        """Update staff member's own profile"""
+        user = MerchantUser.query.get(staff_id)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'Staff member not found',
+                'error_code': 'MERCH_006'
+            }
+
+        # Staff can only update limited fields
+        allowed_fields = ['full_name', 'phone']
+
+        for field in allowed_fields:
+            if field in data:
+                setattr(user, field, data[field])
+
+        user.updated_at = datetime.utcnow()
+
+        try:
+            db.session.commit()
+            return {
+                'success': True,
+                'message': 'Profile updated successfully',
+                'data': {
+                    'profile': user.to_dict()
+                }
+            }
+        except Exception as e:
+            db.session.rollback()
+            return {
+                'success': False,
+                'message': f'Failed to update profile: {str(e)}',
+                'error_code': 'SYS_001'
+            }
+
+    @staticmethod
+    def change_staff_password(staff_id, current_password, new_password):
+        """Change staff member's password"""
+        user = MerchantUser.query.get(staff_id)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'Staff member not found',
+                'error_code': 'MERCH_006'
+            }
+
+        # Verify current password
+        if not user.check_password(current_password):
+            return {
+                'success': False,
+                'message': 'Current password is incorrect',
+                'error_code': 'AUTH_003'
+            }
+
+        # Validate new password
+        if len(new_password) < 6:
+            return {
+                'success': False,
+                'message': 'New password must be at least 6 characters',
+                'error_code': 'VAL_001'
+            }
+
+        try:
+            user.set_password(new_password)
+            user.updated_at = datetime.utcnow()
+            db.session.commit()
+
+            return {
+                'success': True,
+                'message': 'Password changed successfully'
+            }
+        except Exception as e:
+            db.session.rollback()
+            return {
+                'success': False,
+                'message': f'Failed to change password: {str(e)}',
+                'error_code': 'SYS_001'
+            }
+
+    @staticmethod
+    def get_mobile_dashboard(staff_id, merchant_id, from_date=None, to_date=None):
+        """Get role-based dashboard data for mobile app"""
+        from datetime import date, timedelta
+        from app.models.merchant_user import ROLE_NAMES_AR, ROLE_NAMES_EN
+
+        user = MerchantUser.query.get(staff_id)
+        merchant = Merchant.query.get(merchant_id)
+
+        if not user or not merchant:
+            return {
+                'success': False,
+                'message': 'User or merchant not found',
+                'error_code': 'MERCH_001'
+            }
+
+        # Set default date range (today)
+        today = date.today()
+        if not from_date:
+            from_date = today.isoformat()
+        if not to_date:
+            to_date = today.isoformat()
+
+        # Get accessible branch IDs based on role
+        accessible_branch_ids = user.get_accessible_branch_ids()
+
+        # Build transaction query based on role
+        tx_query = Transaction.query.filter(Transaction.merchant_id == merchant_id)
+
+        if not user.can_see_all_branches() and accessible_branch_ids:
+            tx_query = tx_query.filter(Transaction.branch_id.in_(accessible_branch_ids))
+
+        # Filter by date
+        tx_query = tx_query.filter(
+            db.func.date(Transaction.created_at) >= from_date,
+            db.func.date(Transaction.created_at) <= to_date
+        )
+
+        # Calculate stats
+        total_transactions = tx_query.count()
+        total_sales = db.session.query(
+            db.func.coalesce(db.func.sum(Transaction.total_amount), 0)
+        ).filter(
+            Transaction.merchant_id == merchant_id,
+            Transaction.status.in_(['confirmed', 'paid']),
+            db.func.date(Transaction.created_at) >= from_date,
+            db.func.date(Transaction.created_at) <= to_date
+        )
+
+        if not user.can_see_all_branches() and accessible_branch_ids:
+            total_sales = total_sales.filter(Transaction.branch_id.in_(accessible_branch_ids))
+
+        total_sales = total_sales.scalar() or 0
+
+        # Pending transactions
+        pending_count = tx_query.filter(Transaction.status == 'pending').count()
+
+        # Get recent transactions (last 5)
+        recent_transactions = tx_query.order_by(
+            Transaction.created_at.desc()
+        ).limit(5).all()
+
+        # Build dashboard response
+        dashboard_data = {
+            'user': {
+                'id': user.id,
+                'full_name': user.full_name,
+                'role': user.role,
+                'role_ar': ROLE_NAMES_AR.get(user.role, user.role),
+                'role_en': ROLE_NAMES_EN.get(user.role, user.role),
+                'branch': user.branch.to_dict() if user.branch else None,
+                'region': user.region.to_dict() if user.region else None
+            },
+            'merchant': {
+                'id': merchant.id,
+                'name_ar': merchant.name_ar,
+                'name_en': merchant.name_en,
+                'logo_url': None
+            },
+            'stats': {
+                'total_transactions': total_transactions,
+                'total_sales': float(total_sales),
+                'pending_transactions': pending_count,
+                'period': {
+                    'from_date': from_date,
+                    'to_date': to_date
+                }
+            },
+            'recent_transactions': [
+                {
+                    'id': tx.id,
+                    'reference_number': tx.reference_number,
+                    'total_amount': float(tx.total_amount),
+                    'status': tx.status,
+                    'created_at': tx.created_at.isoformat() if tx.created_at else None,
+                    'customer_name': tx.customer.full_name_ar if tx.customer else None
+                }
+                for tx in recent_transactions
+            ],
+            'capabilities': {
+                'can_create_transactions': user.can_create_transactions(),
+                'can_manage_staff': user.can_manage_staff(),
+                'can_see_all_branches': user.can_see_all_branches(),
+                'can_see_all_regions': user.can_see_all_regions()
+            }
+        }
+
+        # Add role-specific data
+        if user.is_top_level():
+            # Owner/Executive Manager sees more stats
+            dashboard_data['stats']['active_branches'] = Branch.query.filter_by(
+                merchant_id=merchant_id, is_active=True
+            ).count()
+            dashboard_data['stats']['active_staff'] = MerchantUser.query.filter_by(
+                merchant_id=merchant_id, is_active=True
+            ).count()
+            dashboard_data['stats']['regions'] = Region.query.filter_by(
+                merchant_id=merchant_id, is_active=True
+            ).count()
+
+        return {
+            'success': True,
+            'data': dashboard_data
+        }
+
+    @staticmethod
+    def get_role_based_stats(staff_id, merchant_id):
+        """Get quick stats based on staff role"""
+        from datetime import date, timedelta
+
+        user = MerchantUser.query.get(staff_id)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'Staff member not found',
+                'error_code': 'MERCH_006'
+            }
+
+        today = date.today()
+        week_ago = today - timedelta(days=7)
+
+        accessible_branch_ids = user.get_accessible_branch_ids()
+
+        # Base query
+        tx_query = Transaction.query.filter(Transaction.merchant_id == merchant_id)
+
+        if not user.can_see_all_branches() and accessible_branch_ids:
+            tx_query = tx_query.filter(Transaction.branch_id.in_(accessible_branch_ids))
+
+        # Today's stats
+        today_tx = tx_query.filter(
+            db.func.date(Transaction.created_at) == today
+        )
+
+        today_count = today_tx.count()
+        today_sales = db.session.query(
+            db.func.coalesce(db.func.sum(Transaction.total_amount), 0)
+        ).filter(
+            Transaction.merchant_id == merchant_id,
+            Transaction.status.in_(['confirmed', 'paid']),
+            db.func.date(Transaction.created_at) == today
+        )
+
+        if not user.can_see_all_branches() and accessible_branch_ids:
+            today_sales = today_sales.filter(Transaction.branch_id.in_(accessible_branch_ids))
+
+        today_sales = today_sales.scalar() or 0
+
+        # Week stats
+        week_tx = tx_query.filter(
+            db.func.date(Transaction.created_at) >= week_ago
+        )
+
+        week_count = week_tx.count()
+        week_sales = db.session.query(
+            db.func.coalesce(db.func.sum(Transaction.total_amount), 0)
+        ).filter(
+            Transaction.merchant_id == merchant_id,
+            Transaction.status.in_(['confirmed', 'paid']),
+            db.func.date(Transaction.created_at) >= week_ago
+        )
+
+        if not user.can_see_all_branches() and accessible_branch_ids:
+            week_sales = week_sales.filter(Transaction.branch_id.in_(accessible_branch_ids))
+
+        week_sales = week_sales.scalar() or 0
+
+        # Pending count
+        pending_count = tx_query.filter(Transaction.status == 'pending').count()
+
+        stats = {
+            'today': {
+                'transactions': today_count,
+                'sales': float(today_sales)
+            },
+            'week': {
+                'transactions': week_count,
+                'sales': float(week_sales)
+            },
+            'pending_transactions': pending_count,
+            'scope': {
+                'type': 'all' if user.can_see_all_branches() else (
+                    'region' if user.role == 'region_manager' else 'branch'
+                ),
+                'branch_count': len(accessible_branch_ids)
+            }
+        }
+
+        return {
+            'success': True,
+            'data': {
+                'stats': stats
+            }
+        }
+
+    @staticmethod
+    def get_accessible_branches(staff_id):
+        """Get branches accessible by staff member"""
+        user = MerchantUser.query.get(staff_id)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'Staff member not found',
+                'error_code': 'MERCH_006'
+            }
+
+        branch_ids = user.get_accessible_branch_ids()
+        branches = Branch.query.filter(Branch.id.in_(branch_ids)).all() if branch_ids else []
+
+        return {
+            'success': True,
+            'data': {
+                'branches': [b.to_dict() for b in branches]
+            }
+        }
+
+    @staticmethod
+    def get_accessible_regions(staff_id):
+        """Get regions accessible by staff member"""
+        user = MerchantUser.query.get(staff_id)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'Staff member not found',
+                'error_code': 'MERCH_006'
+            }
+
+        region_ids = user.get_accessible_region_ids()
+        regions = Region.query.filter(Region.id.in_(region_ids)).all() if region_ids else []
+
+        regions_data = []
+        for region in regions:
+            region_dict = region.to_dict()
+            region_dict['branch_count'] = Branch.query.filter_by(
+                region_id=region.id, is_active=True
+            ).count()
+            regions_data.append(region_dict)
+
+        return {
+            'success': True,
+            'data': {
+                'regions': regions_data
+            }
+        }
+
+    @staticmethod
+    def get_subordinates(staff_id):
+        """Get staff members that the user can manage"""
+        from app.models.merchant_user import ROLE_NAMES_AR, ROLE_NAMES_EN
+
+        user = MerchantUser.query.get(staff_id)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'Staff member not found',
+                'error_code': 'MERCH_006'
+            }
+
+        subordinates = user.get_subordinates()
+
+        team_data = []
+        for member in subordinates:
+            member_dict = member.to_dict()
+            member_dict['branch'] = member.branch.to_dict() if member.branch else None
+            member_dict['region'] = member.region.to_dict() if member.region else None
+            team_data.append(member_dict)
+
+        return {
+            'success': True,
+            'data': {
+                'team': team_data,
+                'count': len(team_data)
+            }
+        }
+
+    @staticmethod
+    def get_today_activity(staff_id, merchant_id):
+        """Get today's activity for cashier/branch manager"""
+        from datetime import date
+
+        user = MerchantUser.query.get(staff_id)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'Staff member not found',
+                'error_code': 'MERCH_006'
+            }
+
+        today = date.today()
+
+        # Get transactions created by this staff member today
+        my_tx_query = Transaction.query.filter(
+            Transaction.cashier_id == staff_id,
+            db.func.date(Transaction.created_at) == today
+        )
+
+        my_transaction_count = my_tx_query.count()
+        my_sales = db.session.query(
+            db.func.coalesce(db.func.sum(Transaction.total_amount), 0)
+        ).filter(
+            Transaction.cashier_id == staff_id,
+            Transaction.status.in_(['confirmed', 'paid']),
+            db.func.date(Transaction.created_at) == today
+        ).scalar() or 0
+
+        # Get pending transactions in my scope
+        accessible_branch_ids = user.get_accessible_branch_ids()
+
+        pending_query = Transaction.query.filter(
+            Transaction.merchant_id == merchant_id,
+            Transaction.status == 'pending'
+        )
+
+        if not user.can_see_all_branches() and accessible_branch_ids:
+            pending_query = pending_query.filter(
+                Transaction.branch_id.in_(accessible_branch_ids)
+            )
+
+        pending_count = pending_query.count()
+
+        # Recent transactions by me
+        my_recent = my_tx_query.order_by(
+            Transaction.created_at.desc()
+        ).limit(10).all()
+
+        return {
+            'success': True,
+            'data': {
+                'today': {
+                    'my_transactions': my_transaction_count,
+                    'my_sales': float(my_sales),
+                    'pending_in_scope': pending_count
+                },
+                'recent_transactions': [
+                    {
+                        'id': tx.id,
+                        'reference_number': tx.reference_number,
+                        'total_amount': float(tx.total_amount),
+                        'status': tx.status,
+                        'created_at': tx.created_at.isoformat() if tx.created_at else None,
+                        'customer_name': tx.customer.full_name_ar if tx.customer else None
+                    }
+                    for tx in my_recent
+                ]
+            }
+        }

@@ -781,6 +781,59 @@ class TransactionService:
             }
         }
 
+    # ==================== Staff Transactions (Mobile App) ====================
+
+    @staticmethod
+    def get_staff_transactions(staff_id, status=None, from_date=None, to_date=None, page=1, per_page=20):
+        """Get transactions created by a specific staff member"""
+        user = MerchantUser.query.get(staff_id)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'Staff member not found',
+                'error_code': 'MERCH_006'
+            }
+
+        query = Transaction.query.filter(Transaction.cashier_id == staff_id)
+
+        if status:
+            query = query.filter(Transaction.status == status)
+
+        if from_date:
+            query = query.filter(db.func.date(Transaction.created_at) >= from_date)
+
+        if to_date:
+            query = query.filter(db.func.date(Transaction.created_at) <= to_date)
+
+        query = query.order_by(Transaction.created_at.desc())
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        transactions = []
+        for tx in pagination.items:
+            tx_dict = tx.to_dict()
+            tx_dict['customer'] = {
+                'id': tx.customer.id,
+                'full_name_ar': tx.customer.full_name_ar,
+                'full_name_en': tx.customer.full_name_en,
+                'bariq_id': tx.customer.bariq_id
+            } if tx.customer else None
+            tx_dict['branch'] = tx.branch.to_dict() if tx.branch else None
+            transactions.append(tx_dict)
+
+        return {
+            'success': True,
+            'data': {
+                'transactions': transactions
+            },
+            'meta': {
+                'page': page,
+                'per_page': per_page,
+                'total': pagination.total,
+                'total_pages': pagination.pages
+            }
+        }
+
     # ==================== Notifications ====================
 
     @staticmethod
