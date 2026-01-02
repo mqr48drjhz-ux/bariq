@@ -371,6 +371,18 @@ def get_credit_health():
 
 # ==================== Device Registration (FCM) ====================
 
+@customers_bp.route('/me/devices', methods=['GET'])
+@jwt_required()
+def get_devices():
+    """Get registered devices"""
+    from app.services.notification_service import NotificationService
+
+    identity = current_user
+    result = NotificationService.get_customer_devices(identity['id'])
+
+    return jsonify(result)
+
+
 @customers_bp.route('/me/devices', methods=['POST'])
 @jwt_required()
 def register_device():
@@ -384,7 +396,8 @@ def register_device():
         customer_id=identity['id'],
         fcm_token=data.get('fcm_token'),
         device_type=data.get('device_type'),
-        device_name=data.get('device_name')
+        device_name=data.get('device_name'),
+        device_id=data.get('device_id')
     )
 
     if not result['success']:
@@ -405,4 +418,145 @@ def unregister_device(device_id):
     if not result['success']:
         return jsonify(result), 400
 
+    return jsonify(result)
+
+
+# ==================== PayTabs Payment Gateway ====================
+
+@customers_bp.route('/me/payments/initiate', methods=['POST'])
+@jwt_required()
+def initiate_payment():
+    """
+    Initiate a payment via PayTabs
+
+    Request body:
+    {
+        "transaction_ids": [1, 2, 3],  // or single "transaction_id": 1
+        "amount": 100.00,
+        "payment_method": "all"  // optional: all, creditcard, mada, stcpay, applepay
+    }
+
+    Returns payment page URL for redirect
+    """
+    from app.services.paytabs_service import PayTabsService
+
+    identity = current_user
+    data = request.get_json()
+
+    if not data:
+        return jsonify({
+            'success': False,
+            'message': 'Request body is required',
+            'error_code': 'VAL_001'
+        }), 400
+
+    # Support both single and multiple transaction IDs
+    transaction_ids = data.get('transaction_ids')
+    if not transaction_ids:
+        transaction_id = data.get('transaction_id')
+        if transaction_id:
+            transaction_ids = [transaction_id]
+
+    if not transaction_ids:
+        return jsonify({
+            'success': False,
+            'message': 'transaction_ids or transaction_id is required',
+            'error_code': 'VAL_001'
+        }), 400
+
+    amount = data.get('amount')
+    if not amount:
+        return jsonify({
+            'success': False,
+            'message': 'amount is required',
+            'error_code': 'VAL_001'
+        }), 400
+
+    payment_method = data.get('payment_method', 'all')
+
+    result = PayTabsService.create_payment_page(
+        customer_id=identity['id'],
+        transaction_ids=transaction_ids,
+        amount=float(amount),
+        payment_methods=payment_method,
+        description=data.get('description')
+    )
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    return jsonify(result), 201
+
+
+@customers_bp.route('/me/payments/<payment_id>/status', methods=['GET'])
+@jwt_required()
+def get_payment_status(payment_id):
+    """Get payment status by payment ID"""
+    from app.models.payment import Payment
+
+    identity = current_user
+
+    payment = Payment.query.filter_by(
+        id=payment_id,
+        customer_id=identity['id']
+    ).first()
+
+    if not payment:
+        return jsonify({
+            'success': False,
+            'message': 'Payment not found',
+            'error_code': 'PAY_006'
+        }), 404
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'payment_id': payment.id,
+            'status': payment.status,
+            'amount': float(payment.amount),
+            'payment_method': payment.payment_method,
+            'gateway_reference': payment.gateway_reference,
+            'created_at': payment.created_at.isoformat() if payment.created_at else None,
+            'completed_at': payment.completed_at.isoformat() if payment.completed_at else None
+        }
+    })
+
+
+@customers_bp.route('/me/payments/query/<tran_ref>', methods=['GET'])
+@jwt_required()
+def query_payment_gateway(tran_ref):
+    """Query payment status directly from PayTabs"""
+    from app.services.paytabs_service import PayTabsService
+    from app.models.payment import Payment
+
+    identity = current_user
+
+    # Verify this payment belongs to the customer
+    payment = Payment.query.filter_by(
+        gateway_reference=tran_ref,
+        customer_id=identity['id']
+    ).first()
+
+    if not payment:
+        return jsonify({
+            'success': False,
+            'message': 'Payment not found',
+            'error_code': 'PAY_006'
+        }), 404
+
+    result = PayTabsService.query_payment_status(tran_ref)
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    return jsonify(result)
+
+
+@customers_bp.route('/me/payment-methods', methods=['GET'])
+@jwt_required()
+def get_payment_methods():
+    """Get available payment methods"""
+    from app.services.paytabs_service import PayTabsService
+
+    result = PayTabsService.get_available_payment_methods()
     return jsonify(result)

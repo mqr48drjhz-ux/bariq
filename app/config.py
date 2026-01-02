@@ -46,6 +46,36 @@ class Config:
     DEFAULT_PAGE_SIZE = 20
     MAX_PAGE_SIZE = 100
 
+    # PayTabs Configuration
+    PAYTABS_PROFILE_ID = os.environ.get('PAYTABS_PROFILE_ID', '')
+    PAYTABS_SERVER_KEY = os.environ.get('PAYTABS_SERVER_KEY', '')
+    PAYTABS_CLIENT_KEY = os.environ.get('PAYTABS_CLIENT_KEY', '')
+    PAYTABS_CURRENCY = os.environ.get('PAYTABS_CURRENCY', 'SAR')
+    PAYTABS_REGION = os.environ.get('PAYTABS_REGION', 'egypt')  # egypt, saudi, uae, etc.
+    PAYTABS_SANDBOX = os.environ.get('PAYTABS_SANDBOX', 'true').lower() == 'true'
+
+    # PayTabs URLs (auto-set based on region)
+    @property
+    def PAYTABS_BASE_URL(self):
+        region = self.PAYTABS_REGION.lower()
+        region_urls = {
+            'egypt': 'https://secure-egypt.paytabs.com',
+            'saudi': 'https://secure.paytabs.sa',
+            'uae': 'https://secure.paytabs.com',
+            'global': 'https://secure-global.paytabs.com'
+        }
+        return region_urls.get(region, region_urls['egypt'])
+
+    # Payment Settings
+    PAYMENT_RETURN_URL = os.environ.get('PAYMENT_RETURN_URL', 'http://localhost:5001/payment/complete')
+    PAYMENT_CALLBACK_URL = os.environ.get('PAYMENT_CALLBACK_URL', 'http://localhost:5001/api/v1/webhooks/paytabs')
+    PAYMENT_EXPIRY_MINUTES = int(os.environ.get('PAYMENT_EXPIRY_MINUTES', '30'))
+    MIN_PAYMENT_AMOUNT = float(os.environ.get('MIN_PAYMENT_AMOUNT', '10'))
+
+    # Firebase Configuration
+    FIREBASE_CREDENTIALS_PATH = os.environ.get('FIREBASE_CREDENTIALS_PATH', '')
+    FIREBASE_CREDENTIALS_JSON = os.environ.get('FIREBASE_CREDENTIALS_JSON', '')
+
 
 class DevelopmentConfig(Config):
     """Development configuration"""

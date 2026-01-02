@@ -4,6 +4,7 @@ Notification Service - Full Implementation for Mobile App
 from datetime import datetime
 from app.extensions import db
 from app.models.notification import Notification
+from app.models.device import CustomerDevice, MerchantUserDevice
 
 
 class NotificationService:
@@ -134,11 +135,8 @@ class NotificationService:
     # ==================== Device Registration for Push Notifications ====================
 
     @staticmethod
-    def register_device(customer_id, fcm_token, device_type, device_name=None):
+    def register_device(customer_id, fcm_token, device_type, device_name=None, device_id=None):
         """Register device for push notifications (FCM)"""
-        # For now, store in a simple way - in production, create a CustomerDevice model
-        # This is a placeholder implementation
-
         if not fcm_token:
             return {
                 'success': False,
@@ -153,49 +151,119 @@ class NotificationService:
                 'error_code': 'VAL_001'
             }
 
-        # In production, save to CustomerDevice table
-        # For now, return success
-        return {
-            'success': True,
-            'message': 'Device registered successfully',
-            'data': {
-                'device_id': 'device_' + fcm_token[:8],
-                'device_type': device_type,
-                'device_name': device_name
+        try:
+            # Check if device already exists (by token)
+            existing = CustomerDevice.query.filter_by(
+                customer_id=customer_id,
+                fcm_token=fcm_token
+            ).first()
+
+            if existing:
+                # Update existing device
+                existing.device_type = device_type
+                existing.device_name = device_name
+                existing.device_id = device_id
+                existing.is_active = True
+                existing.last_used_at = datetime.utcnow()
+                db.session.commit()
+                return {
+                    'success': True,
+                    'message': 'Device updated successfully',
+                    'data': existing.to_dict()
+                }
+
+            # Create new device
+            device = CustomerDevice(
+                customer_id=customer_id,
+                fcm_token=fcm_token,
+                device_type=device_type,
+                device_name=device_name,
+                device_id=device_id,
+                is_active=True,
+                last_used_at=datetime.utcnow()
+            )
+            db.session.add(device)
+            db.session.commit()
+
+            return {
+                'success': True,
+                'message': 'Device registered successfully',
+                'data': device.to_dict()
             }
-        }
+
+        except Exception as e:
+            db.session.rollback()
+            return {
+                'success': False,
+                'message': f'Failed to register device: {str(e)}',
+                'error_code': 'SYS_001'
+            }
 
     @staticmethod
     def unregister_device(customer_id, device_id):
         """Unregister device from push notifications"""
-        # In production, delete from CustomerDevice table
-        # For now, return success
+        try:
+            device = CustomerDevice.query.filter_by(
+                id=device_id,
+                customer_id=customer_id
+            ).first()
+
+            if not device:
+                return {
+                    'success': False,
+                    'message': 'Device not found',
+                    'error_code': 'DEV_001'
+                }
+
+            db.session.delete(device)
+            db.session.commit()
+
+            return {
+                'success': True,
+                'message': 'Device unregistered successfully'
+            }
+        except Exception as e:
+            db.session.rollback()
+            return {
+                'success': False,
+                'message': f'Failed to unregister device: {str(e)}',
+                'error_code': 'SYS_001'
+            }
+
+    @staticmethod
+    def get_customer_devices(customer_id):
+        """Get all devices for a customer"""
+        devices = CustomerDevice.query.filter_by(
+            customer_id=customer_id,
+            is_active=True
+        ).all()
+
         return {
             'success': True,
-            'message': 'Device unregistered successfully'
+            'data': {
+                'devices': [d.to_dict() for d in devices]
+            }
         }
 
     # ==================== Send Push Notification ====================
 
     @staticmethod
-    def send_push_notification(customer_id, title, body, data=None):
-        """Send push notification to customer's devices (placeholder)"""
-        # In production, use Firebase Admin SDK to send push notifications
-        # For now, just create an in-app notification
+    def send_push_notification(customer_id, title, body, data=None, notification_type='push',
+                               related_entity_type=None, related_entity_id=None):
+        """Send push notification to customer's devices via Firebase FCM"""
+        from app.services.firebase_service import push_manager
 
-        NotificationService.create_notification(
+        return push_manager.send_to_customer(
             customer_id=customer_id,
             title_ar=title,
             body_ar=body,
-            notification_type='push',
             title_en=title,
-            body_en=body
+            body_en=body,
+            data=data,
+            notification_type=notification_type,
+            related_entity_type=related_entity_type,
+            related_entity_id=related_entity_id
         )
-
-        return {
-            'success': True,
-            'message': 'Notification sent'
-        }
 
     # ==================== Notification Templates ====================
 
@@ -397,7 +465,7 @@ class NotificationService:
     # ==================== Merchant Device Registration ====================
 
     @staticmethod
-    def register_merchant_device(staff_id, fcm_token, device_type, device_name=None):
+    def register_merchant_device(staff_id, fcm_token, device_type, device_name=None, device_id=None):
         """Register merchant staff device for push notifications"""
         if not fcm_token:
             return {
@@ -413,26 +481,116 @@ class NotificationService:
                 'error_code': 'VAL_001'
             }
 
-        # In production, save to MerchantDevice table
-        # For now, return success
-        return {
-            'success': True,
-            'message': 'Device registered successfully',
-            'data': {
-                'device_id': 'merchant_device_' + fcm_token[:8],
-                'device_type': device_type,
-                'device_name': device_name
+        try:
+            # Check if device already exists
+            existing = MerchantUserDevice.query.filter_by(
+                merchant_user_id=staff_id,
+                fcm_token=fcm_token
+            ).first()
+
+            if existing:
+                existing.device_type = device_type
+                existing.device_name = device_name
+                existing.device_id = device_id
+                existing.is_active = True
+                existing.last_used_at = datetime.utcnow()
+                db.session.commit()
+                return {
+                    'success': True,
+                    'message': 'Device updated successfully',
+                    'data': existing.to_dict()
+                }
+
+            # Create new device
+            device = MerchantUserDevice(
+                merchant_user_id=staff_id,
+                fcm_token=fcm_token,
+                device_type=device_type,
+                device_name=device_name,
+                device_id=device_id,
+                is_active=True,
+                last_used_at=datetime.utcnow()
+            )
+            db.session.add(device)
+            db.session.commit()
+
+            return {
+                'success': True,
+                'message': 'Device registered successfully',
+                'data': device.to_dict()
             }
-        }
+
+        except Exception as e:
+            db.session.rollback()
+            return {
+                'success': False,
+                'message': f'Failed to register device: {str(e)}',
+                'error_code': 'SYS_001'
+            }
 
     @staticmethod
     def unregister_merchant_device(staff_id, device_id):
         """Unregister merchant staff device from push notifications"""
-        # In production, delete from MerchantDevice table
+        try:
+            device = MerchantUserDevice.query.filter_by(
+                id=device_id,
+                merchant_user_id=staff_id
+            ).first()
+
+            if not device:
+                return {
+                    'success': False,
+                    'message': 'Device not found',
+                    'error_code': 'DEV_001'
+                }
+
+            db.session.delete(device)
+            db.session.commit()
+
+            return {
+                'success': True,
+                'message': 'Device unregistered successfully'
+            }
+        except Exception as e:
+            db.session.rollback()
+            return {
+                'success': False,
+                'message': f'Failed to unregister device: {str(e)}',
+                'error_code': 'SYS_001'
+            }
+
+    @staticmethod
+    def get_merchant_devices(staff_id):
+        """Get all devices for a merchant staff"""
+        devices = MerchantUserDevice.query.filter_by(
+            merchant_user_id=staff_id,
+            is_active=True
+        ).all()
+
         return {
             'success': True,
-            'message': 'Device unregistered successfully'
+            'data': {
+                'devices': [d.to_dict() for d in devices]
+            }
         }
+
+    @staticmethod
+    def send_merchant_push_notification(staff_id, title, body, data=None, notification_type='push',
+                                        related_entity_type=None, related_entity_id=None):
+        """Send push notification to merchant staff's devices via Firebase FCM"""
+        from app.services.firebase_service import push_manager
+
+        return push_manager.send_to_merchant_user(
+            merchant_user_id=staff_id,
+            title_ar=title,
+            body_ar=body,
+            title_en=title,
+            body_en=body,
+            data=data,
+            notification_type=notification_type,
+            related_entity_type=related_entity_type,
+            related_entity_id=related_entity_id
+        )
 
     # ==================== Merchant Staff Notification Templates ====================
 

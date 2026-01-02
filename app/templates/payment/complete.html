@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نتيجة الدفع - بريق اليسر</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .icon {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            font-size: 50px;
+        }
+
+        .icon.success {
+            background: #e8f5e9;
+            color: #4caf50;
+        }
+
+        .icon.error {
+            background: #ffebee;
+            color: #f44336;
+        }
+
+        .icon.pending {
+            background: #fff3e0;
+            color: #ff9800;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .message {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .details {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: right;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .detail-value {
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: #00897b;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #00695c;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            margin-top: 10px;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .logo {
+            margin-bottom: 20px;
+        }
+
+        .logo img {
+            height: 50px;
+        }
+
+        .logo-text {
+            font-size: 24px;
+            font-weight: bold;
+            color: #00897b;
+        }
+
+        /* Status-specific styles */
+        .status-A h1 { color: #4caf50; }
+        .status-E h1, .status-D h1 { color: #f44336; }
+        .status-P h1, .status-H h1 { color: #ff9800; }
+
+        /* Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .container {
+            animation: fadeIn 0.5s ease;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container status-{{ status or 'P' }}">
+        <div class="logo">
+            <span class="logo-text">بريق اليسر</span>
+        </div>
+
+        {% if status == 'A' %}
+            <div class="icon success">&#10004;</div>
+            <h1>تمت عملية الدفع بنجاح</h1>
+            <p class="message">شكراً لك! تم استلام دفعتك بنجاح وتم تحديث رصيدك.</p>
+        {% elif status == 'D' or status == 'E' %}
+            <div class="icon error">&#10006;</div>
+            <h1>فشلت عملية الدفع</h1>
+            <p class="message">{{ message or 'عذراً، لم تتم عملية الدفع. يرجى المحاولة مرة أخرى أو التواصل مع الدعم.' }}</p>
+        {% elif status == 'V' %}
+            <div class="icon error">&#10006;</div>
+            <h1>تم إلغاء العملية</h1>
+            <p class="message">تم إلغاء عملية الدفع.</p>
+        {% else %}
+            <div class="icon pending">&#8987;</div>
+            <h1>جاري معالجة الدفع</h1>
+            <p class="message">يتم الآن معالجة عملية الدفع. سيتم تحديث حسابك خلال لحظات.</p>
+        {% endif %}
+
+        {% if tran_ref %}
+        <div class="details">
+            <div class="detail-row">
+                <span class="detail-label">رقم المرجع</span>
+                <span class="detail-value">{{ tran_ref }}</span>
+            </div>
+            {% if cart_id %}
+            <div class="detail-row">
+                <span class="detail-label">رقم السلة</span>
+                <span class="detail-value">{{ cart_id }}</span>
+            </div>
+            {% endif %}
+            <div class="detail-row">
+                <span class="detail-label">الحالة</span>
+                <span class="detail-value">
+                    {% if status == 'A' %}مكتملة
+                    {% elif status == 'D' %}مرفوضة
+                    {% elif status == 'E' %}خطأ
+                    {% elif status == 'V' %}ملغاة
+                    {% else %}قيد المعالجة
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="buttons">
+            <a href="/customer/payments" class="btn btn-primary">العودة للمدفوعات</a>
+            <a href="/customer" class="btn btn-secondary">الصفحة الرئيسية</a>
+        </div>
+    </div>
+
+    <script>
+        // If this is a mobile app WebView, send message to app
+        function notifyApp() {
+            const status = '{{ status }}';
+            const tranRef = '{{ tran_ref }}';
+            const message = {
+                type: 'payment_complete',
+                status: status,
+                tranRef: tranRef,
+                success: status === 'A'
+            };
+
+            // For Flutter WebView
+            if (window.flutter_inappwebview) {
+                window.flutter_inappwebview.callHandler('paymentComplete', message);
+            }
+
+            // For React Native WebView
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify(message));
+            }
+
+            // For native iOS WKWebView
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.paymentComplete) {
+                window.webkit.messageHandlers.paymentComplete.postMessage(message);
+            }
+
+            // For Android WebView
+            if (window.Android && window.Android.onPaymentComplete) {
+                window.Android.onPaymentComplete(JSON.stringify(message));
+            }
+        }
+
+        // Notify app on page load
+        document.addEventListener('DOMContentLoaded', notifyApp);
+
+        // Also try immediately
+        notifyApp();
+    </script>
+</body>
+</html>

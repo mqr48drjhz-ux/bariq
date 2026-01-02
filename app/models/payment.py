@@ -23,6 +23,11 @@ class Payment(db.Model, TimestampMixin):
     external_reference = db.Column(db.String(100), nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
 
+    # PayTabs gateway fields
+    gateway_reference = db.Column(db.String(100), nullable=True, index=True)  # PayTabs tran_ref
+    gateway_response = db.Column(db.Text, nullable=True)  # Full gateway response JSON
+    refunded_amount = db.Column(db.Numeric(10, 2), default=0)
+
     # Relationships
     transaction = db.relationship('Transaction', back_populates='payments')
     customer = db.relationship('Customer', back_populates='payments')
@@ -40,5 +45,8 @@ class Payment(db.Model, TimestampMixin):
             'amount': float(self.amount),
             'payment_method': self.payment_method,
             'status': self.status,
+            'gateway_reference': self.gateway_reference,
+            'refunded_amount': float(self.refunded_amount) if self.refunded_amount else 0,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
         }

@@ -23,9 +23,11 @@ from app.api.v1.customers import customers_bp
 from app.api.v1.merchants import merchants_bp
 from app.api.v1.admin import admin_bp
 from app.api.v1.public import public_bp
+from app.api.v1.webhooks import webhooks_bp
 
 api_v1_bp.register_blueprint(auth_bp, url_prefix='/auth')
 api_v1_bp.register_blueprint(customers_bp, url_prefix='/customers')
 api_v1_bp.register_blueprint(merchants_bp, url_prefix='/merchants')
 api_v1_bp.register_blueprint(admin_bp, url_prefix='/admin')
 api_v1_bp.register_blueprint(public_bp, url_prefix='/public')
+api_v1_bp.register_blueprint(webhooks_bp, url_prefix='/webhooks')

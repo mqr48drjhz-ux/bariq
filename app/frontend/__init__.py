@@ -112,3 +112,25 @@ def merchant_team():
 def merchant_regions():
     """Merchant regions page"""
     return render_template('merchant/regions.html', active_page='regions')
+
+
+# ==================== Payment Gateway Pages ====================
+
+@frontend_bp.route('/payment/complete')
+def payment_complete():
+    """Payment completion redirect page"""
+    from flask import request
+
+    # PayTabs will redirect here with query params
+    tran_ref = request.args.get('tranRef')
+    cart_id = request.args.get('cartId')
+    status = request.args.get('respStatus')
+    message = request.args.get('respMessage')
+
+    return render_template(
+        'payment/complete.html',
+        tran_ref=tran_ref,
+        cart_id=cart_id,
+        status=status,
+        message=message
+    )

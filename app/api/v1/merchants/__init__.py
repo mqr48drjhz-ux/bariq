@@ -706,6 +706,18 @@ def mark_all_staff_notifications_read():
 
 # -------- Device Registration (FCM) --------
 
+@merchants_bp.route('/me/devices', methods=['GET'])
+@jwt_required()
+def get_staff_devices():
+    """Get registered devices"""
+    from app.services.notification_service import NotificationService
+
+    identity = current_user
+    result = NotificationService.get_merchant_devices(identity['id'])
+
+    return jsonify(result)
+
+
 @merchants_bp.route('/me/devices', methods=['POST'])
 @jwt_required()
 def register_staff_device():
@@ -719,7 +731,8 @@ def register_staff_device():
         staff_id=identity['id'],
         fcm_token=data.get('fcm_token'),
         device_type=data.get('device_type'),
-        device_name=data.get('device_name')
+        device_name=data.get('device_name'),
+        device_id=data.get('device_id')
     )
 
     if not result['success']:

@@ -60,8 +60,8 @@
 
   function renderPaymentPage(container) {
     const totalDebt = debtData?.total_debt || 0;
-    const overdueDebt = debtData?.overdue_debt || 0;
-    const transactions = debtData?.unpaid_transactions || [];
+    const overdueDebt = debtData?.overdue_amount || 0;
+    const transactions = debtData?.transactions || [];
 
     container.innerHTML = `
       <!-- Debt Summary -->
@@ -114,13 +114,13 @@
           ${transactions.length > 0 ? `
             <div class="transaction-list">
               ${transactions.map(txn => `
-                <div class="transaction-item ${selectedTransaction?.id === txn.id ? 'selected' : ''}" onclick="selectTransaction('${txn.id}')">
+                <div class="transaction-item ${selectedTransaction?.id === txn.id ? 'selected' : ''}" onclick="selectTransaction('${txn.id}', ${txn.remaining_amount})">
                   <div style="flex: 1;">
-                    <p class="font-bold">${txn.merchant?.name_ar || 'متجر'}</p>
+                    <p class="font-bold">${txn.merchant_name || txn.merchant?.name_ar || 'متجر'}</p>
                     <p class="text-sm text-muted">${txn.reference_number} • ${formatDate(txn.due_date)}</p>
                   </div>
                   <div style="text-align: left;">
-                    <p class="font-bold text-lg ${txn.is_overdue ? 'text-danger' : ''}">${formatNumber(txn.remaining_amount)} نقطة</p>
+                    <p class="font-bold text-lg ${txn.is_overdue ? 'text-danger' : ''}">${formatNumber(txn.remaining_amount)} ريال</p>
                     ${txn.is_overdue ? '<span class="badge badge-danger">متأخر</span>' : ''}
                   </div>
                 </div>
@@ -154,31 +154,31 @@
             <div class="form-group">
               <label class="form-label">طريقة الدفع</label>
               <div class="payment-methods">
-                <label class="payment-method selected" onclick="selectPaymentMethod('bank_transfer')">
-                  <input type="radio" name="payment_method" value="bank_transfer" checked hidden>
+                <label class="payment-method selected" onclick="selectPaymentMethod('paytabs')">
+                  <input type="radio" name="payment_method" value="paytabs" checked hidden>
+                  <span class="method-icon">💳</span>
+                  <span class="method-name">بطاقة / مدى</span>
+                </label>
+                <label class="payment-method" onclick="selectPaymentMethod('bank_transfer')">
+                  <input type="radio" name="payment_method" value="bank_transfer" hidden>
                   <span class="method-icon">🏦</span>
                   <span class="method-name">تحويل بنكي</span>
                 </label>
-                <label class="payment-method" onclick="selectPaymentMethod('cash')">
-                  <input type="radio" name="payment_method" value="cash" hidden>
-                  <span class="method-icon">💵</span>
-                  <span class="method-name">نقداً</span>
-                </label>
-                <label class="payment-method" onclick="selectPaymentMethod('card')">
-                  <input type="radio" name="payment_method" value="card" hidden>
-                  <span class="method-icon">💳</span>
-                  <span class="method-name">بطاقة</span>
-                </label>
-                <label class="payment-method" onclick="selectPaymentMethod('wallet')">
-                  <input type="radio" name="payment_method" value="wallet" hidden>
+                <label class="payment-method" onclick="selectPaymentMethod('stcpay')">
+                  <input type="radio" name="payment_method" value="stcpay" hidden>
                   <span class="method-icon">📱</span>
-                  <span class="method-name">محفظة</span>
+                  <span class="method-name">STC Pay</span>
+                </label>
+                <label class="payment-method" onclick="selectPaymentMethod('applepay')">
+                  <input type="radio" name="payment_method" value="applepay" hidden>
+                  <span class="method-icon">🍎</span>
+                  <span class="method-name">Apple Pay</span>
                 </label>
               </div>
             </div>
             
-            <!-- Bank Transfer Info -->
-            <div id="bank-info" class="card mb-4" style="background: var(--gray-50);">
+            <!-- Bank Transfer Info (hidden by default) -->
+            <div id="bank-info" class="card mb-4" style="background: var(--gray-50); display: none;">
               <h4 style="margin: 0 0 var(--space-3) 0;">معلومات الحساب البنكي</h4>
               <div class="info-row">
                 <span class="info-label">البنك</span>
@@ -194,12 +194,23 @@
               </div>
               <p class="text-sm text-muted mt-3">⚠️ يرجى ذكر رقم بريق الخاص بك في وصف التحويل</p>
             </div>
+
+            <!-- PayTabs Info -->
+            <div id="paytabs-info" class="card mb-4" style="background: var(--teal-50); border: 1px solid var(--teal-200);">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 2rem;">🔒</span>
+                <div>
+                  <h4 style="margin: 0;">دفع آمن عبر PayTabs</h4>
+                  <p class="text-sm text-muted" style="margin: 4px 0 0 0;">سيتم تحويلك لصفحة الدفع الآمنة لإتمام العملية</p>
+                </div>
+              </div>
+            </div>
             
             <div id="payment-error" class="alert alert-error hidden"></div>
             <div id="payment-success" class="alert alert-success hidden"></div>
             
             <button type="submit" id="submit-btn" class="btn btn-primary btn-lg btn-block">
-              تأكيد الدفع
+              الدفع الآن
             </button>
           </form>
         </div>
@@ -207,8 +218,26 @@
     `;
   }
 
-  function selectTransaction(txnId) {
-    window.location.href = `/customer/pay?txn=${txnId}`;
+  function selectTransaction(txnId, remainingAmount) {
+    // Find the transaction in our data
+    const txn = debtData?.transactions?.find(t => t.id === txnId);
+    if (txn) {
+      selectedTransaction = txn;
+      // Update UI to show selection
+      document.querySelectorAll('.transaction-item').forEach(el => el.classList.remove('selected'));
+      event.currentTarget.classList.add('selected');
+
+      // Update amount field
+      const amountInput = document.getElementById('payment-amount');
+      if (amountInput) {
+        amountInput.value = remainingAmount || txn.remaining_amount;
+        amountInput.max = txn.remaining_amount;
+      }
+
+      // Hide error if shown
+      const errorEl = document.getElementById('payment-error');
+      if (errorEl) errorEl.classList.add('hidden');
+    }
   }
 
   function clearSelection() {
@@ -221,10 +250,25 @@
     document.querySelector(`input[value="${method}"]`).parentElement.classList.add('selected');
     document.querySelector(`input[value="${method}"]`).checked = true;
 
-    // Show/hide bank info
+    // Show/hide info sections
     const bankInfo = document.getElementById('bank-info');
+    const paytabsInfo = document.getElementById('paytabs-info');
+
     if (bankInfo) {
       bankInfo.style.display = method === 'bank_transfer' ? 'block' : 'none';
+    }
+    if (paytabsInfo) {
+      paytabsInfo.style.display = ['paytabs', 'stcpay', 'applepay'].includes(method) ? 'block' : 'none';
+    }
+
+    // Update button text
+    const submitBtn = document.getElementById('submit-btn');
+    if (submitBtn) {
+      if (['paytabs', 'stcpay', 'applepay'].includes(method)) {
+        submitBtn.textContent = 'الدفع الآن';
+      } else {
+        submitBtn.textContent = 'تأكيد الدفع';
+      }
     }
   }
 
@@ -253,32 +297,72 @@
     }
 
     submitBtn.disabled = true;
-    submitBtn.textContent = 'جاري الإرسال...';
+    submitBtn.textContent = 'جاري التحويل...';
 
     try {
-      const result = await API.customer.makePayment(selectedTransaction.id, amount, method);
+      // Check if using PayTabs gateway
+      if (['paytabs', 'stcpay', 'applepay'].includes(method)) {
+        // Initiate PayTabs payment
+        const token = TokenManager.getAccessToken();
+        const response = await fetch('/api/v1/customers/me/payments/initiate', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            transaction_ids: [selectedTransaction.id],
+            amount: amount,
+            payment_method: method === 'paytabs' ? 'all' : method
+          })
+        });
 
-      if (result.success && result.data.success) {
-        successEl.innerHTML = `
-          ✅ تم تسجيل الدفع بنجاح!<br>
-          <small>سيتم مراجعة الدفع وتحديث رصيدك قريباً</small>
-        `;
-        successEl.classList.remove('hidden');
+        const result = await response.json();
 
-        setTimeout(() => {
-          window.location.href = '/customer/transactions';
-        }, 2000);
+        if (result.success && result.data?.payment_url) {
+          successEl.innerHTML = `
+            ✅ جاري التحويل لصفحة الدفع...<br>
+            <small>سيتم تحويلك خلال ثوانٍ</small>
+          `;
+          successEl.classList.remove('hidden');
+
+          // Redirect to PayTabs payment page
+          setTimeout(() => {
+            window.location.href = result.data.payment_url;
+          }, 1500);
+        } else {
+          errorEl.textContent = result.message || 'فشل إنشاء صفحة الدفع';
+          errorEl.classList.remove('hidden');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'الدفع الآن';
+        }
       } else {
-        errorEl.textContent = result.data?.message || 'فشل تسجيل الدفع';
-        errorEl.classList.remove('hidden');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'تأكيد الدفع';
+        // Manual payment (bank transfer, etc.)
+        const result = await API.customer.makePayment(selectedTransaction.id, amount, method);
+
+        if (result.success && result.data.success) {
+          successEl.innerHTML = `
+            ✅ تم تسجيل الدفع بنجاح!<br>
+            <small>سيتم مراجعة الدفع وتحديث رصيدك قريباً</small>
+          `;
+          successEl.classList.remove('hidden');
+
+          setTimeout(() => {
+            window.location.href = '/customer/transactions';
+          }, 2000);
+        } else {
+          errorEl.textContent = result.data?.message || 'فشل تسجيل الدفع';
+          errorEl.classList.remove('hidden');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'تأكيد الدفع';
+        }
       }
     } catch (error) {
+      console.error('Payment error:', error);
       errorEl.textContent = 'حدث خطأ أثناء تسجيل الدفع';
       errorEl.classList.remove('hidden');
       submitBtn.disabled = false;
-      submitBtn.textContent = 'تأكيد الدفع';
+      submitBtn.textContent = method.includes('paytabs') ? 'الدفع الآن' : 'تأكيد الدفع';
     }
   }
 

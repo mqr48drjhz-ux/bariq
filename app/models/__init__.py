@@ -20,6 +20,7 @@ from app.models.audit_log import AuditLog
 from app.models.system_setting import SystemSetting
 from app.models.promotion import Promotion
 from app.models.customer_rating import CustomerRating
+from app.models.device import CustomerDevice, MerchantUserDevice
 
 __all__ = [
     'Customer',
@@ -40,4 +41,6 @@ __all__ = [
     'SystemSetting',
     'Promotion',
     'CustomerRating',
+    'CustomerDevice',
+    'MerchantUserDevice',
 ]
