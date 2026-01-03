@@ -171,10 +171,10 @@ class FirebaseService:
         image_url: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Send push notification to multiple devices
+        Send push notification to multiple devices (using individual sends for FCM v1 API)
 
         Args:
-            tokens: List of FCM device tokens (max 500)
+            tokens: List of FCM device tokens
             title: Notification title
             body: Notification body
             data: Additional data payload
@@ -204,64 +204,39 @@ class FirebaseService:
                 'failed_tokens': []
             }
 
-        try:
-            # Build notification
-            notification = messaging.Notification(
+        success_count = 0
+        failure_count = 0
+        failed_tokens = []
+
+        # Send to each device individually (FCM v1 API compatible)
+        for token in tokens:
+            result = cls.send_notification(
+                token=token,
                 title=title,
                 body=body,
-                image=image_url
+                data=data,
+                image_url=image_url
             )
 
-            # Build message
-            message = messaging.MulticastMessage(
-                notification=notification,
-                data=data or {},
-                tokens=tokens,
-                android=messaging.AndroidConfig(
-                    priority='high',
-                    notification=messaging.AndroidNotification(
-                        sound='default',
-                        click_action='FLUTTER_NOTIFICATION_CLICK'
-                    )
-                ),
-                apns=messaging.APNSConfig(
-                    payload=messaging.APNSPayload(
-                        aps=messaging.Aps(sound='default')
-                    )
-                )
-            )
+            if result.get('success') and not result.get('mock'):
+                success_count += 1
+                logger.info(f"FCM sent to {token[:30]}...")
+            else:
+                failure_count += 1
+                failed_tokens.append({
+                    'token': token,
+                    'error': result.get('message', 'Unknown error')
+                })
+                logger.warning(f"FCM failed for {token[:30]}...: {result.get('message')}")
 
-            # Send multicast
-            response = messaging.send_multicast(message)
+        logger.info(f"FCM send complete: {success_count} success, {failure_count} failed")
 
-            # Collect failed tokens
-            failed_tokens = []
-            if response.failure_count > 0:
-                for idx, send_response in enumerate(response.responses):
-                    if not send_response.success:
-                        failed_tokens.append({
-                            'token': tokens[idx],
-                            'error': str(send_response.exception)
-                        })
-
-            logger.info(f"FCM multicast: {response.success_count} success, {response.failure_count} failed")
-
-            return {
-                'success': True,
-                'success_count': response.success_count,
-                'failure_count': response.failure_count,
-                'failed_tokens': failed_tokens
-            }
-
-        except Exception as e:
-            logger.error(f"FCM multicast error: {str(e)}")
-            return {
-                'success': False,
-                'error': str(e),
-                'success_count': 0,
-                'failure_count': len(tokens),
-                'failed_tokens': tokens
-            }
+        return {
+            'success': True,
+            'success_count': success_count,
+            'failure_count': failure_count,
+            'failed_tokens': failed_tokens
+        }
 
     @classmethod
     def send_to_topic(

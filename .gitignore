@@ -128,3 +128,4 @@ Thumbs.db
 *.log
 logs/
 uploads/
+pythonanywhere.env
