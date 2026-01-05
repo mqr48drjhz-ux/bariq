@@ -1,0 +1,549 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}التقارير والتحليلات{% endblock %}
+
+{% block page_content %}
+<div id="reports-content">
+    <div class="loading-container"><div class="spinner"></div></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+    let revenueChart = null;
+    let transactionChart = null;
+    let customerChart = null;
+    let merchantChart = null;
+    let currentReportType = 'financial';
+    let currentFilters = {};
+
+    async function loadReports(reportType = 'financial', filters = {}) {
+        const container = document.getElementById('reports-content');
+        currentReportType = reportType;
+        currentFilters = filters;
+
+        // Default date range: last 30 days
+        if (!filters.from_date) {
+            const today = new Date();
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            filters.from_date = thirtyDaysAgo.toISOString().split('T')[0];
+            filters.to_date = today.toISOString().split('T')[0];
+        }
+
+        container.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <div>
+                    <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--gray-900); margin-bottom: 0.25rem;">التقارير والتحليلات</h1>
+                    <p style="color: var(--gray-500);">تحليل شامل لأداء النظام</p>
+                </div>
+                <button onclick="exportReport()" class="btn btn-secondary">📥 تصدير التقرير</button>
+            </div>
+
+            <!-- Report Type Tabs -->
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button onclick="loadReports('financial', currentFilters)" class="btn ${reportType === 'financial' ? 'btn-primary' : 'btn-secondary'}">💰 التقرير المالي</button>
+                    <button onclick="loadReports('transactions', currentFilters)" class="btn ${reportType === 'transactions' ? 'btn-primary' : 'btn-secondary'}">📋 المعاملات</button>
+                    <button onclick="loadReports('customers', currentFilters)" class="btn ${reportType === 'customers' ? 'btn-primary' : 'btn-secondary'}">👥 العملاء</button>
+                    <button onclick="loadReports('merchants', currentFilters)" class="btn ${reportType === 'merchants' ? 'btn-primary' : 'btn-secondary'}">🏪 التجار</button>
+                </div>
+            </div>
+
+            <!-- Date Range Filter -->
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+                    <div style="min-width: 150px;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; color: var(--gray-600);">من تاريخ</label>
+                        <input type="date" id="fromDate" class="form-control" value="${filters.from_date || ''}">
+                    </div>
+                    <div style="min-width: 150px;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-size: 0.875rem; color: var(--gray-600);">الى تاريخ</label>
+                        <input type="date" id="toDate" class="form-control" value="${filters.to_date || ''}">
+                    </div>
+                    <button onclick="applyDateFilter()" class="btn btn-primary">تطبيق</button>
+                    <button onclick="setQuickRange('week')" class="btn btn-secondary">آخر أسبوع</button>
+                    <button onclick="setQuickRange('month')" class="btn btn-secondary">آخر شهر</button>
+                    <button onclick="setQuickRange('quarter')" class="btn btn-secondary">آخر 3 أشهر</button>
+                </div>
+            </div>
+
+            <div id="report-content">
+                <div class="loading-container"><div class="spinner"></div></div>
+            </div>
+        `;
+
+        // Load specific report
+        const reportContainer = document.getElementById('report-content');
+        try {
+            switch (reportType) {
+                case 'financial': await loadFinancialReport(reportContainer, filters); break;
+                case 'transactions': await loadTransactionsReport(reportContainer, filters); break;
+                case 'customers': await loadCustomersReport(reportContainer, filters); break;
+                case 'merchants': await loadMerchantsReport(reportContainer, filters); break;
+            }
+        } catch (error) {
+            showError(reportContainer, 'حدث خطأ في تحميل التقرير');
+        }
+    }
+
+    async function loadFinancialReport(container, filters) {
+        const result = await API.admin.getFinancialReport(filters);
+        const data = result.data?.data || {};
+
+        container.innerHTML = `
+            <!-- KPI Cards -->
+            <div class="grid-4" style="margin-bottom: 2rem;">
+                <div class="stat-card stat-card-teal">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-label">اجمالي الايرادات</div>
+                    <div class="stat-value">${formatCurrency(data.total_revenue || 0)}</div>
+                </div>
+                <div class="stat-card stat-card-emerald">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-label">العمولات المكتسبة</div>
+                    <div class="stat-value">${formatCurrency(data.total_commission || 0)}</div>
+                </div>
+                <div class="stat-card stat-card-amber">
+                    <div class="stat-icon">⏳</div>
+                    <div class="stat-label">المبالغ المستحقة</div>
+                    <div class="stat-value">${formatCurrency(data.outstanding_debt || 0)}</div>
+                </div>
+                <div class="stat-card stat-card-sky">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-label">نسبة التحصيل</div>
+                    <div class="stat-value">${(data.collection_rate || 0).toFixed(1)}%</div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid-2" style="margin-bottom: 2rem;">
+                <div class="card">
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">الايرادات اليومية</h3>
+                    <div class="chart-container"><canvas id="revenueChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">توزيع طرق الدفع</h3>
+                    <div class="chart-container"><canvas id="paymentMethodsChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Detailed Table -->
+            <div class="card">
+                <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">تفاصيل الايرادات</h3>
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>التاريخ</th>
+                                <th>المعاملات</th>
+                                <th>الايرادات</th>
+                                <th>المدفوعات</th>
+                                <th>العمولات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(data.daily_breakdown || []).map(d => `
+                                <tr>
+                                    <td>${formatDate(d.date)}</td>
+                                    <td>${d.transactions_count || 0}</td>
+                                    <td>${formatCurrency(d.revenue)}</td>
+                                    <td>${formatCurrency(d.payments)}</td>
+                                    <td>${formatCurrency(d.commission)}</td>
+                                </tr>
+                            `).join('')}
+                            ${(data.daily_breakdown || []).length === 0 ? '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--gray-500);">لا توجد بيانات</td></tr>' : ''}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // Initialize revenue chart
+        const revenueCtx = document.getElementById('revenueChart');
+        if (revenueCtx && data.daily_breakdown) {
+            revenueChart = new Chart(revenueCtx, {
+                type: 'line',
+                data: {
+                    labels: data.daily_breakdown.map(d => formatDate(d.date)),
+                    datasets: [{
+                        label: 'الايرادات',
+                        data: data.daily_breakdown.map(d => d.revenue || 0),
+                        borderColor: 'rgba(20, 184, 166, 1)',
+                        backgroundColor: 'rgba(20, 184, 166, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        // Initialize payment methods chart
+        const paymentCtx = document.getElementById('paymentMethodsChart');
+        if (paymentCtx && data.payment_methods) {
+            const methodLabels = { 'creditcard': 'بطاقة ائتمان', 'mada': 'مدى', 'applepay': 'Apple Pay', 'stcpay': 'STC Pay', 'cash': 'نقدي' };
+            new Chart(paymentCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(data.payment_methods).map(k => methodLabels[k] || k),
+                    datasets: [{
+                        data: Object.values(data.payment_methods),
+                        backgroundColor: ['rgba(20, 184, 166, 0.8)', 'rgba(16, 185, 129, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(99, 102, 241, 0.8)', 'rgba(236, 72, 153, 0.8)']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', rtl: true } } }
+            });
+        }
+    }
+
+    async function loadTransactionsReport(container, filters) {
+        const result = await API.admin.getOverviewReport({ ...filters, report_type: 'transactions' });
+        const data = result.data?.data || {};
+
+        container.innerHTML = `
+            <!-- KPI Cards -->
+            <div class="grid-4" style="margin-bottom: 2rem;">
+                <div class="stat-card stat-card-teal">
+                    <div class="stat-icon">📋</div>
+                    <div class="stat-label">اجمالي المعاملات</div>
+                    <div class="stat-value">${data.total_transactions || 0}</div>
+                </div>
+                <div class="stat-card stat-card-emerald">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-label">مكتملة</div>
+                    <div class="stat-value">${data.paid_transactions || 0}</div>
+                </div>
+                <div class="stat-card stat-card-amber">
+                    <div class="stat-icon">⏳</div>
+                    <div class="stat-label">قيد التنفيذ</div>
+                    <div class="stat-value">${data.pending_transactions || 0}</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, var(--rose-50), var(--rose-100)); border-color: var(--rose-200);">
+                    <div class="stat-icon">🚨</div>
+                    <div class="stat-label" style="color: var(--rose-700);">متأخرة</div>
+                    <div class="stat-value" style="color: var(--rose-700);">${data.overdue_transactions || 0}</div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid-2" style="margin-bottom: 2rem;">
+                <div class="card">
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">المعاملات اليومية</h3>
+                    <div class="chart-container"><canvas id="transactionChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">توزيع الحالات</h3>
+                    <div class="chart-container"><canvas id="statusChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Summary Table -->
+            <div class="card">
+                <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">ملخص الفترة</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <div style="background: var(--gray-50); padding: 1rem; border-radius: 0.5rem;">
+                        <div style="color: var(--gray-500); font-size: 0.75rem;">متوسط قيمة المعاملة</div>
+                        <div style="font-size: 1.25rem; font-weight: 700;">${formatCurrency(data.avg_transaction_value || 0)}</div>
+                    </div>
+                    <div style="background: var(--gray-50); padding: 1rem; border-radius: 0.5rem;">
+                        <div style="color: var(--gray-500); font-size: 0.75rem;">أعلى معاملة</div>
+                        <div style="font-size: 1.25rem; font-weight: 700;">${formatCurrency(data.max_transaction || 0)}</div>
+                    </div>
+                    <div style="background: var(--gray-50); padding: 1rem; border-radius: 0.5rem;">
+                        <div style="color: var(--gray-500); font-size: 0.75rem;">مبلغ المتأخرات</div>
+                        <div style="font-size: 1.25rem; font-weight: 700; color: var(--rose-600);">${formatCurrency(data.overdue_amount || 0)}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Initialize transaction chart
+        const ctx = document.getElementById('transactionChart');
+        if (ctx && data.daily_transactions) {
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.daily_transactions.map(d => formatDate(d.date)),
+                    datasets: [{
+                        label: 'المعاملات',
+                        data: data.daily_transactions.map(d => d.count || 0),
+                        backgroundColor: 'rgba(20, 184, 166, 0.8)',
+                        borderRadius: 4
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        // Status distribution chart
+        const statusCtx = document.getElementById('statusChart');
+        if (statusCtx) {
+            new Chart(statusCtx, {
+                type: 'pie',
+                data: {
+                    labels: ['مكتملة', 'قيد التنفيذ', 'متأخرة', 'ملغية'],
+                    datasets: [{
+                        data: [data.paid_transactions || 0, data.pending_transactions || 0, data.overdue_transactions || 0, data.cancelled_transactions || 0],
+                        backgroundColor: ['rgba(16, 185, 129, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(239, 68, 68, 0.8)', 'rgba(156, 163, 175, 0.8)']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', rtl: true } } }
+            });
+        }
+    }
+
+    async function loadCustomersReport(container, filters) {
+        const result = await API.admin.getOverviewReport({ ...filters, report_type: 'customers' });
+        const data = result.data?.data || {};
+
+        container.innerHTML = `
+            <!-- KPI Cards -->
+            <div class="grid-4" style="margin-bottom: 2rem;">
+                <div class="stat-card stat-card-teal">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-label">اجمالي العملاء</div>
+                    <div class="stat-value">${data.total_customers || 0}</div>
+                </div>
+                <div class="stat-card stat-card-emerald">
+                    <div class="stat-icon">🆕</div>
+                    <div class="stat-label">عملاء جدد</div>
+                    <div class="stat-value">${data.new_customers || 0}</div>
+                </div>
+                <div class="stat-card stat-card-amber">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-label">نسبة استخدام الائتمان</div>
+                    <div class="stat-value">${(data.credit_utilization || 0).toFixed(1)}%</div>
+                </div>
+                <div class="stat-card stat-card-sky">
+                    <div class="stat-icon">⭐</div>
+                    <div class="stat-label">العملاء النشطين</div>
+                    <div class="stat-value">${data.active_customers || 0}</div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid-2" style="margin-bottom: 2rem;">
+                <div class="card">
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">نمو العملاء</h3>
+                    <div class="chart-container"><canvas id="customerGrowthChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">توزيع حالات العملاء</h3>
+                    <div class="chart-container"><canvas id="customerStatusChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Top Customers Table -->
+            <div class="card">
+                <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">أفضل العملاء</h3>
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>رقم بريق</th>
+                                <th>الاسم</th>
+                                <th>اجمالي المعاملات</th>
+                                <th>المبلغ الاجمالي</th>
+                                <th>نسبة السداد</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(data.top_customers || []).map(c => `
+                                <tr>
+                                    <td style="font-family: monospace;">${c.bariq_id || '-'}</td>
+                                    <td>${c.full_name_ar || '-'}</td>
+                                    <td>${c.transactions_count || 0}</td>
+                                    <td>${formatCurrency(c.total_amount)}</td>
+                                    <td><span class="badge ${c.payment_rate >= 80 ? 'badge-success' : c.payment_rate >= 50 ? 'badge-warning' : 'badge-danger'}">${(c.payment_rate || 0).toFixed(0)}%</span></td>
+                                </tr>
+                            `).join('')}
+                            ${(data.top_customers || []).length === 0 ? '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--gray-500);">لا توجد بيانات</td></tr>' : ''}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // Customer growth chart
+        const growthCtx = document.getElementById('customerGrowthChart');
+        if (growthCtx && data.customer_growth) {
+            new Chart(growthCtx, {
+                type: 'line',
+                data: {
+                    labels: data.customer_growth.map(d => formatDate(d.date)),
+                    datasets: [{
+                        label: 'العملاء الجدد',
+                        data: data.customer_growth.map(d => d.count || 0),
+                        borderColor: 'rgba(16, 185, 129, 1)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        // Customer status chart
+        const statusCtx = document.getElementById('customerStatusChart');
+        if (statusCtx) {
+            new Chart(statusCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['نشط', 'معلق', 'موقوف'],
+                    datasets: [{
+                        data: [data.active_customers || 0, data.pending_customers || 0, data.suspended_customers || 0],
+                        backgroundColor: ['rgba(16, 185, 129, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(239, 68, 68, 0.8)']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', rtl: true } } }
+            });
+        }
+    }
+
+    async function loadMerchantsReport(container, filters) {
+        const result = await API.admin.getOverviewReport({ ...filters, report_type: 'merchants' });
+        const data = result.data?.data || {};
+
+        container.innerHTML = `
+            <!-- KPI Cards -->
+            <div class="grid-4" style="margin-bottom: 2rem;">
+                <div class="stat-card stat-card-teal">
+                    <div class="stat-icon">🏪</div>
+                    <div class="stat-label">اجمالي التجار</div>
+                    <div class="stat-value">${data.total_merchants || 0}</div>
+                </div>
+                <div class="stat-card stat-card-emerald">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-label">تجار نشطين</div>
+                    <div class="stat-value">${data.active_merchants || 0}</div>
+                </div>
+                <div class="stat-card stat-card-amber">
+                    <div class="stat-icon">⏳</div>
+                    <div class="stat-label">بانتظار الموافقة</div>
+                    <div class="stat-value">${data.pending_merchants || 0}</div>
+                </div>
+                <div class="stat-card stat-card-sky">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-label">اجمالي الفروع</div>
+                    <div class="stat-value">${data.total_branches || 0}</div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid-2" style="margin-bottom: 2rem;">
+                <div class="card">
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">المعاملات حسب التاجر</h3>
+                    <div class="chart-container"><canvas id="merchantTransactionsChart"></canvas></div>
+                </div>
+                <div class="card">
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">توزيع أنواع الأنشطة</h3>
+                    <div class="chart-container"><canvas id="businessTypeChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Top Merchants Table -->
+            <div class="card">
+                <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">أفضل التجار</h3>
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>التاجر</th>
+                                <th>نوع النشاط</th>
+                                <th>عدد المعاملات</th>
+                                <th>اجمالي المبيعات</th>
+                                <th>العمولة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(data.top_merchants || []).map(m => `
+                                <tr>
+                                    <td>${m.name_ar || '-'}</td>
+                                    <td>${m.business_type || '-'}</td>
+                                    <td>${m.transactions_count || 0}</td>
+                                    <td>${formatCurrency(m.total_sales)}</td>
+                                    <td>${formatCurrency(m.total_commission)}</td>
+                                </tr>
+                            `).join('')}
+                            ${(data.top_merchants || []).length === 0 ? '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--gray-500);">لا توجد بيانات</td></tr>' : ''}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // Merchant transactions chart
+        const transCtx = document.getElementById('merchantTransactionsChart');
+        if (transCtx && data.top_merchants) {
+            new Chart(transCtx, {
+                type: 'bar',
+                data: {
+                    labels: data.top_merchants.slice(0, 5).map(m => m.name_ar || 'غير معروف'),
+                    datasets: [{
+                        label: 'المعاملات',
+                        data: data.top_merchants.slice(0, 5).map(m => m.transactions_count || 0),
+                        backgroundColor: 'rgba(20, 184, 166, 0.8)',
+                        borderRadius: 4
+                    }]
+                },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        // Business type chart
+        const typeCtx = document.getElementById('businessTypeChart');
+        if (typeCtx && data.business_types) {
+            new Chart(typeCtx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(data.business_types),
+                    datasets: [{
+                        data: Object.values(data.business_types),
+                        backgroundColor: ['rgba(20, 184, 166, 0.8)', 'rgba(16, 185, 129, 0.8)', 'rgba(245, 158, 11, 0.8)', 'rgba(99, 102, 241, 0.8)', 'rgba(236, 72, 153, 0.8)']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', rtl: true } } }
+            });
+        }
+    }
+
+    function applyDateFilter() {
+        const filters = {
+            from_date: document.getElementById('fromDate')?.value || '',
+            to_date: document.getElementById('toDate')?.value || ''
+        };
+        loadReports(currentReportType, filters);
+    }
+
+    function setQuickRange(range) {
+        const today = new Date();
+        let fromDate = new Date(today);
+
+        switch (range) {
+            case 'week': fromDate.setDate(today.getDate() - 7); break;
+            case 'month': fromDate.setMonth(today.getMonth() - 1); break;
+            case 'quarter': fromDate.setMonth(today.getMonth() - 3); break;
+        }
+
+        loadReports(currentReportType, {
+            from_date: fromDate.toISOString().split('T')[0],
+            to_date: today.toISOString().split('T')[0]
+        });
+    }
+
+    function exportReport() {
+        alert('جاري تصدير التقرير...');
+        // Export would depend on current report type and data
+    }
+
+    document.addEventListener('DOMContentLoaded', () => loadReports());
+</script>
+
+<style>
+.form-control { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--gray-300); border-radius: 0.375rem; font-size: 0.875rem; }
+.chart-container { position: relative; height: 250px; width: 100%; }
+</style>
+{% endblock %}
