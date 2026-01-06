@@ -706,3 +706,30 @@ def verify_payment(payment_id):
                 'gateway_status': gateway_status
             }
         })
+
+
+@customers_bp.route('/me/test-notification', methods=['POST'])
+@jwt_required()
+def test_notification():
+    """Send a test push notification to the customer's devices"""
+    from app.services.notification_service import NotificationService
+
+    identity = get_jwt_identity()
+    if isinstance(identity, str):
+        import json
+        identity = json.loads(identity)
+
+    customer_id = identity.get('id')
+
+    # Create a test notification
+    result = NotificationService.create_notification(
+        customer_id=customer_id,
+        title_ar='إشعار تجريبي',
+        title_en='Test Notification',
+        body_ar='هذا إشعار تجريبي للتأكد من عمل الإشعارات',
+        body_en='This is a test notification to verify notifications are working',
+        notification_type='system',
+        send_push=True
+    )
+
+    return jsonify(result)
