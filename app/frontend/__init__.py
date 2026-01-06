@@ -116,16 +116,22 @@ def merchant_regions():
 
 # ==================== Payment Gateway Pages ====================
 
-@frontend_bp.route('/payment/complete')
+@frontend_bp.route('/payment/complete', methods=['GET', 'POST'])
 def payment_complete():
     """Payment completion redirect page"""
     from flask import request
 
-    # PayTabs will redirect here with query params
-    tran_ref = request.args.get('tranRef')
-    cart_id = request.args.get('cartId')
-    status = request.args.get('respStatus')
-    message = request.args.get('respMessage')
+    # PayTabs can redirect here with query params (GET) or form data (POST)
+    if request.method == 'POST':
+        tran_ref = request.form.get('tranRef') or request.form.get('tran_ref')
+        cart_id = request.form.get('cartId') or request.form.get('cart_id')
+        status = request.form.get('respStatus') or request.form.get('payment_result', {}).get('response_status') if isinstance(request.form.get('payment_result'), dict) else request.form.get('respStatus')
+        message = request.form.get('respMessage') or request.form.get('payment_result', {}).get('response_message') if isinstance(request.form.get('payment_result'), dict) else request.form.get('respMessage')
+    else:
+        tran_ref = request.args.get('tranRef') or request.args.get('tran_ref')
+        cart_id = request.args.get('cartId') or request.args.get('cart_id')
+        status = request.args.get('respStatus')
+        message = request.args.get('respMessage')
 
     return render_template(
         'payment/complete.html',
