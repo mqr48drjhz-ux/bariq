@@ -11,7 +11,9 @@ webhooks_bp = Blueprint('webhooks', __name__)
 
 # Webhook security settings
 WEBHOOK_TIMESTAMP_TOLERANCE_MINUTES = 5  # Allow 5 minute window for webhook timestamps
-REQUIRE_SIGNATURE_IN_PRODUCTION = True
+# PayTabs doesn't always send signatures, so we disable mandatory check
+# Enable this once you configure PayTabs to send server-to-server callbacks with signature
+REQUIRE_SIGNATURE_IN_PRODUCTION = False
 
 
 def _mask_sensitive_data(payload):
