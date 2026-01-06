@@ -22,7 +22,9 @@ with app.app_context():
     from app.models import Customer
     if Customer.query.first() is None:
         print("Seeding database...")
-        exec(open('scripts/seed_data.py').read())
+        # Import and run the seed function
+        from scripts.seed_data import seed_all
+        seed_all()
         print("Seeding complete!")
     else:
         print("Database already has data, skipping seed.")
