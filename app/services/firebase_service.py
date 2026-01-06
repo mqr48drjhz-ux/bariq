@@ -39,11 +39,18 @@ class FirebaseService:
             # Check for service account credentials
             cred_path = os.environ.get('FIREBASE_CREDENTIALS_PATH')
             cred_json = os.environ.get('FIREBASE_CREDENTIALS_JSON')
+            cred_base64 = os.environ.get('FIREBASE_CREDENTIALS_BASE64')
 
             if cred_path and os.path.exists(cred_path):
                 cred = credentials.Certificate(cred_path)
             elif cred_json:
                 cred_dict = json.loads(cred_json)
+                cred = credentials.Certificate(cred_dict)
+            elif cred_base64:
+                # Decode Base64 encoded credentials
+                import base64
+                cred_json_decoded = base64.b64decode(cred_base64).decode('utf-8')
+                cred_dict = json.loads(cred_json_decoded)
                 cred = credentials.Certificate(cred_dict)
             else:
                 logger.warning("No Firebase credentials found. Push notifications disabled.")
