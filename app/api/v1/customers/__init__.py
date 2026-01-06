@@ -714,12 +714,7 @@ def test_notification():
     """Send a test push notification to the customer's devices"""
     from app.services.firebase_service import push_manager
 
-    identity = get_jwt_identity()
-    if isinstance(identity, str):
-        import json
-        identity = json.loads(identity)
-
-    customer_id = identity.get('id')
+    customer_id = current_user.get('id')
 
     # Send notification (creates in-app + push)
     try:
