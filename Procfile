@@ -1,1 +1,1 @@
-web: gunicorn -w 2 --threads 4 wsgi:app
+web: gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 --bind 0.0.0.0:$PORT wsgi:app
