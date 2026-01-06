@@ -25,6 +25,21 @@ class FirebaseService:
     _initialized = False
     _app = None
 
+    # Hardcoded Firebase credentials
+    FIREBASE_CREDENTIALS = {
+        "type": "service_account",
+        "project_id": "bariq-al-yusr",
+        "private_key_id": "947d7f14659d087712fd15e20a2dc424e675a4d6",
+        "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCiK8Rqz2KsjkM+\nNEhoh//NrySz0TpmpqzkHEyoCMAIXEME2f3jgb4OpoZoZbOJf9b9NlzNMH2+OE75\n3/ZiOQ86LZwLQby6djAAcjmcdvlcabC6ej1sr+ybdyYkcoy8YeO79j9Ui253Bm1n\nKZ7MWzglwY2mNLn34Nv1WQQ/2bRlTlOuNvkB55p/bhikoncua+PSItCYf7fOjw+u\n2o+o03auNQuD5rJRmWpZFZw47dqPmLxGNMV+Y0ZLQHRnbwT6Gjd6oOuXP/MmfS+i\nizyqQKYH0ehX7+gu+21gUVGgAI5bQXDexWCjNHIiW33cTUSK5l/GFIbJ7HyYIExH\n9V2XAjeNAgMBAAECggEAAnJR8/xxbGyepx0PNHjA5l29/TxPwq57YMu95Rrlx7t6\niVvptfaTzdzPArB1+dVi60DgFPaDVS/bWI4alvAv1BAIDuw0fr0qDZbxYjJoY/dq\nlwAKK5Xid7PX0WxfOmoXd/vg9L4wnKPW3YKj+eu8BNP7mWBrn/B+NtbEJ3Le1J5n\npelgxwj9p1QFrxJF0JHxcvQya6DwI6ZQt9EpCB4k6jHZQmd5cUNOH4MtsuZDbW/m\n9g0OAzJ0T4qTLg8Cy0dSGORgpPvO9ZnCZlk9vjG/qyndGowTugKt/R3M/Z5oOXX8\nA9koIMJAbehyAEPXinzUpZ1JTDmdk+wjzd91E8o1EwKBgQDc79ihGZMfxf7Ktml9\noH1v7tZmqShGLZ0kyepS8LuAP6cGSf6CE+ijEFs0szXj92txJNnkiSrv1VAFqhAJ\nm8ofi4W8w5IqPv6ga9UPOkE54ROZWXzjwVkRzS/Xm3kBap8hlsQGauR3AThmOoCe\n5Dvm/JFFvTuwzkh17Yl4FONdRwKBgQC76GXAju6kfDeA4fllSI5ID/zU4Dw0C47w\n++N1rUN3CFhwcOcgMmsQSOWvFh/3LJRuDcdX0xMMA4JgVb6kF2ewBwIV3XGcneJS\nsSdFiLQXgqEJOcAuDo0tYOI3gtbwbYyjFQgQJ5aRMVEgKkjSwm1q4+KbgzykTP5t\nwcUTr33eiwKBgAL66T0jDyz6irlJRJsBMy/zVMkFtxlbPCdm4dZEkQLl2Obo0JoI\nkrbAXbqUQEHW8IgSKy49+2pIwk+RP64hf9R1GVS2fp47Q0v+qF0QOBkDxDPpVRnt\nXbozvlV2L2epfIQDeJltj69bQNuAJoP+KCCxf3QlXUzBO5D7p0MLZRW5AoGBAKqJ\nEb+eeKrDKURI0aTAIpD4IYe5MioxyzqeACMOakofQtRZQwmPeGdBIWKze7NBvDvd\nOWtVXtXqYWq4ptoZe7rfwV7CqJdxGrPdnzyWAovLvAa5aNbj0fC7GtMyZYuygI6J\nSdYPd7Cxx2Sfu5O7bL4zr7dfdavPTKGj2A4zmNJdAoGBAJWv32WiyGMR1kn9VISb\np9Ua9rBmnqbNIm1P0s0zBNcOkhkBUYE1GnLgOi0yS7gh0JbI2uC8ffmXqXz5+I/q\ncpAfMo2f+/xlvTv88PvbyAQv3SYst/XyTURCBWO5LHZeb8VXxwC4WfEoVPtwqe9L\nQBqHSv5LJdYonG+uH/lhvfUe\n-----END PRIVATE KEY-----\n",
+        "client_email": "firebase-adminsdk-fbsvc@bariq-al-yusr.iam.gserviceaccount.com",
+        "client_id": "106654875332820506645",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40bariq-al-yusr.iam.gserviceaccount.com",
+        "universe_domain": "googleapis.com"
+    }
+
     @classmethod
     def initialize(cls):
         """Initialize Firebase Admin SDK"""
@@ -36,58 +51,19 @@ class FirebaseService:
             return False
 
         try:
-            # Check for service account credentials
-            cred_path = os.environ.get('FIREBASE_CREDENTIALS_PATH')
-            cred_json = os.environ.get('FIREBASE_CREDENTIALS_JSON')
-            cred_base64 = os.environ.get('FIREBASE_CREDENTIALS_BASE64')
+            # Use hardcoded credentials first, then fall back to environment variables
+            cred = None
 
-            if cred_path and os.path.exists(cred_path):
-                cred = credentials.Certificate(cred_path)
-            elif cred_json:
-                cred_dict = json.loads(cred_json)
-                cred = credentials.Certificate(cred_dict)
-            elif cred_base64:
-                # Decode Base64 encoded credentials
-                import base64
-                try:
-                    # Remove any whitespace/newlines that Railway might add
-                    cred_base64_clean = cred_base64.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+            # Try hardcoded credentials first
+            try:
+                cred = credentials.Certificate(cls.FIREBASE_CREDENTIALS)
+                logger.info("Firebase credentials loaded from hardcoded config")
+            except Exception as e:
+                logger.warning(f"Failed to load hardcoded credentials: {e}")
 
-                    # Add padding if needed
-                    padding = 4 - len(cred_base64_clean) % 4
-                    if padding != 4:
-                        cred_base64_clean += '=' * padding
-
-                    cred_json_decoded = base64.b64decode(cred_base64_clean).decode('utf-8')
-
-                    # Fix any escaped newlines in private_key that got double-escaped
-                    # The private_key should contain actual \n but sometimes they become \\n
-                    cred_json_decoded = cred_json_decoded.replace('\\\\n', '\\n')
-
-                    cred_dict = json.loads(cred_json_decoded)
-
-                    # Ensure private_key has proper newlines
-                    if 'private_key' in cred_dict:
-                        pk = cred_dict['private_key']
-                        # Replace literal \n with actual newlines if needed
-                        if '\\n' in pk and '\n' not in pk:
-                            cred_dict['private_key'] = pk.replace('\\n', '\n')
-
-                    cred = credentials.Certificate(cred_dict)
-                    logger.info("Firebase credentials loaded from Base64 successfully")
-                except Exception as decode_error:
-                    logger.error(f"Failed to decode Base64 credentials: {str(decode_error)}")
-                    logger.info("Trying alternative JSON parsing...")
-                    # Try parsing as regular JSON (in case it's not actually base64)
-                    try:
-                        cred_dict = json.loads(cred_base64)
-                        cred = credentials.Certificate(cred_dict)
-                        logger.info("Firebase credentials loaded from raw JSON")
-                    except Exception as json_error:
-                        logger.error(f"All Firebase credential parsing methods failed: {json_error}")
-                        return False
-            else:
-                logger.warning("No Firebase credentials found. Push notifications disabled.")
+            # If hardcoded credentials failed, credentials are not available
+            if not cred:
+                logger.warning("No Firebase credentials available. Push notifications disabled.")
                 return False
 
             cls._app = firebase_admin.initialize_app(cred)
