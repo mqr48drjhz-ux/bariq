@@ -49,9 +49,22 @@ class FirebaseService:
             elif cred_base64:
                 # Decode Base64 encoded credentials
                 import base64
-                cred_json_decoded = base64.b64decode(cred_base64).decode('utf-8')
-                cred_dict = json.loads(cred_json_decoded)
-                cred = credentials.Certificate(cred_dict)
+                try:
+                    # Remove any whitespace/newlines that Railway might add
+                    cred_base64_clean = cred_base64.replace('\n', '').replace('\r', '').replace(' ', '')
+                    cred_json_decoded = base64.b64decode(cred_base64_clean).decode('utf-8')
+                    cred_dict = json.loads(cred_json_decoded)
+                    cred = credentials.Certificate(cred_dict)
+                except Exception as decode_error:
+                    logger.error(f"Failed to decode Base64 credentials: {str(decode_error)}")
+                    logger.info("Trying alternative JSON parsing...")
+                    # Try parsing as regular JSON (in case it's not actually base64)
+                    try:
+                        cred_dict = json.loads(cred_base64)
+                        cred = credentials.Certificate(cred_dict)
+                    except:
+                        logger.error("All Firebase credential parsing methods failed")
+                        return False
             else:
                 logger.warning("No Firebase credentials found. Push notifications disabled.")
                 return False
