@@ -721,15 +721,23 @@ def test_notification():
 
     customer_id = identity.get('id')
 
-    # Create a test notification
+    # Create a notification in database + WebSocket
     result = NotificationService.create_notification(
         customer_id=customer_id,
         title_ar='إشعار تجريبي',
         title_en='Test Notification',
         body_ar='هذا إشعار تجريبي للتأكد من عمل الإشعارات',
         body_en='This is a test notification to verify notifications are working',
-        notification_type='system',
-        send_push=True
+        notification_type='system'
     )
+
+    # Also send push notification
+    if result.get('success'):
+        push_result = NotificationService.send_push_notification(
+            customer_id=customer_id,
+            title='إشعار تجريبي',
+            body='هذا إشعار تجريبي للتأكد من عمل الإشعارات'
+        )
+        result['push_result'] = push_result
 
     return jsonify(result)
