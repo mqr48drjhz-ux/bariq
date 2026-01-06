@@ -712,7 +712,7 @@ def verify_payment(payment_id):
 @jwt_required()
 def test_notification():
     """Send a test push notification to the customer's devices"""
-    from app.services.notification_service import NotificationService
+    from app.services.firebase_service import push_manager
 
     identity = get_jwt_identity()
     if isinstance(identity, str):
@@ -721,23 +721,16 @@ def test_notification():
 
     customer_id = identity.get('id')
 
-    # Create a notification in database + WebSocket
-    result = NotificationService.create_notification(
-        customer_id=customer_id,
-        title_ar='إشعار تجريبي',
-        title_en='Test Notification',
-        body_ar='هذا إشعار تجريبي للتأكد من عمل الإشعارات',
-        body_en='This is a test notification to verify notifications are working',
-        notification_type='system'
-    )
-
-    # Also send push notification
-    if result.get('success'):
-        push_result = NotificationService.send_push_notification(
+    # Send notification (creates in-app + push)
+    try:
+        result = push_manager.send_to_customer(
             customer_id=customer_id,
-            title='إشعار تجريبي',
-            body='هذا إشعار تجريبي للتأكد من عمل الإشعارات'
+            title_ar='إشعار تجريبي',
+            body_ar='هذا إشعار تجريبي للتأكد من عمل الإشعارات',
+            title_en='Test Notification',
+            body_en='This is a test notification',
+            notification_type='system'
         )
-        result['push_result'] = push_result
-
-    return jsonify(result)
+        return jsonify({'success': True, 'data': result})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e), 'error_code': 'PUSH_001'})
