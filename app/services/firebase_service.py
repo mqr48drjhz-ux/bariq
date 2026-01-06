@@ -51,10 +51,30 @@ class FirebaseService:
                 import base64
                 try:
                     # Remove any whitespace/newlines that Railway might add
-                    cred_base64_clean = cred_base64.replace('\n', '').replace('\r', '').replace(' ', '')
+                    cred_base64_clean = cred_base64.strip().replace('\n', '').replace('\r', '').replace(' ', '')
+
+                    # Add padding if needed
+                    padding = 4 - len(cred_base64_clean) % 4
+                    if padding != 4:
+                        cred_base64_clean += '=' * padding
+
                     cred_json_decoded = base64.b64decode(cred_base64_clean).decode('utf-8')
+
+                    # Fix any escaped newlines in private_key that got double-escaped
+                    # The private_key should contain actual \n but sometimes they become \\n
+                    cred_json_decoded = cred_json_decoded.replace('\\\\n', '\\n')
+
                     cred_dict = json.loads(cred_json_decoded)
+
+                    # Ensure private_key has proper newlines
+                    if 'private_key' in cred_dict:
+                        pk = cred_dict['private_key']
+                        # Replace literal \n with actual newlines if needed
+                        if '\\n' in pk and '\n' not in pk:
+                            cred_dict['private_key'] = pk.replace('\\n', '\n')
+
                     cred = credentials.Certificate(cred_dict)
+                    logger.info("Firebase credentials loaded from Base64 successfully")
                 except Exception as decode_error:
                     logger.error(f"Failed to decode Base64 credentials: {str(decode_error)}")
                     logger.info("Trying alternative JSON parsing...")
@@ -62,8 +82,9 @@ class FirebaseService:
                     try:
                         cred_dict = json.loads(cred_base64)
                         cred = credentials.Certificate(cred_dict)
-                    except:
-                        logger.error("All Firebase credential parsing methods failed")
+                        logger.info("Firebase credentials loaded from raw JSON")
+                    except Exception as json_error:
+                        logger.error(f"All Firebase credential parsing methods failed: {json_error}")
                         return False
             else:
                 logger.warning("No Firebase credentials found. Push notifications disabled.")
