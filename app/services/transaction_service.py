@@ -1026,72 +1026,106 @@ class TransactionService:
 
     @staticmethod
     def _notify_customer_new_transaction(customer, transaction, merchant, branch):
-        """Send notification for new transaction"""
+        """Send notification for new transaction (in-app + push)"""
         try:
-            notification = Notification(
+            from app.services.firebase_service import push_manager
+
+            title_ar = 'معاملة جديدة'
+            title_en = 'New Transaction'
+            body_ar = f'لديك معاملة جديدة من {merchant.name_ar} بمبلغ {transaction.total_amount} ريال. الرجاء التأكيد.'
+            body_en = f'New transaction from {merchant.name_en or merchant.name_ar} for {transaction.total_amount} SAR. Please confirm.'
+
+            # Send push notification + create in-app notification
+            push_manager.send_to_customer(
                 customer_id=customer.id,
-                title_ar='معاملة جديدة',
-                title_en='New Transaction',
-                body_ar=f'لديك معاملة جديدة من {merchant.name_ar} بمبلغ {transaction.total_amount} ريال. الرجاء التأكيد.',
-                body_en=f'New transaction from {merchant.name_en or merchant.name_ar} for {transaction.total_amount} SAR. Please confirm.',
-                type='transaction',
-                reference_id=transaction.id
+                title_ar=title_ar,
+                body_ar=body_ar,
+                title_en=title_en,
+                body_en=body_en,
+                notification_type='transaction',
+                related_entity_type='transaction',
+                related_entity_id=transaction.id,
+                data={
+                    'type': 'new_transaction',
+                    'transaction_id': str(transaction.id),
+                    'merchant_name': merchant.name_ar,
+                    'amount': str(transaction.total_amount)
+                }
             )
-            db.session.add(notification)
-            db.session.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            # Log error but don't fail the transaction
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send new transaction notification: {e}")
 
     @staticmethod
     def _notify_customer_cancelled(customer, transaction, reason):
-        """Send notification for cancelled transaction"""
+        """Send notification for cancelled transaction (in-app + push)"""
         try:
-            notification = Notification(
+            from app.services.firebase_service import push_manager
+
+            push_manager.send_to_customer(
                 customer_id=customer.id,
                 title_ar='تم إلغاء المعاملة',
-                title_en='Transaction Cancelled',
                 body_ar=f'تم إلغاء المعاملة رقم {transaction.reference_number}',
+                title_en='Transaction Cancelled',
                 body_en=f'Transaction {transaction.reference_number} has been cancelled',
-                type='transaction',
-                reference_id=transaction.id
+                notification_type='transaction',
+                related_entity_type='transaction',
+                related_entity_id=transaction.id,
+                data={
+                    'type': 'transaction_cancelled',
+                    'transaction_id': str(transaction.id)
+                }
             )
-            db.session.add(notification)
-            db.session.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send cancelled notification: {e}")
 
     @staticmethod
     def _notify_customer_return(customer, transaction, return_amount):
-        """Send notification for processed return"""
+        """Send notification for processed return (in-app + push)"""
         try:
-            notification = Notification(
+            from app.services.firebase_service import push_manager
+
+            push_manager.send_to_customer(
                 customer_id=customer.id,
                 title_ar='تم استرداد مبلغ',
-                title_en='Refund Processed',
                 body_ar=f'تم استرداد {return_amount} ريال من المعاملة رقم {transaction.reference_number}',
+                title_en='Refund Processed',
                 body_en=f'{return_amount} SAR refunded from transaction {transaction.reference_number}',
-                type='transaction',
-                reference_id=transaction.id
+                notification_type='transaction',
+                related_entity_type='transaction',
+                related_entity_id=transaction.id,
+                data={
+                    'type': 'refund_processed',
+                    'transaction_id': str(transaction.id),
+                    'refund_amount': str(return_amount)
+                }
             )
-            db.session.add(notification)
-            db.session.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send return notification: {e}")
 
     @staticmethod
     def _notify_customer_overdue(customer, transaction):
-        """Send notification for overdue transaction"""
+        """Send notification for overdue transaction (in-app + push)"""
         try:
-            notification = Notification(
+            from app.services.firebase_service import push_manager
+
+            push_manager.send_to_customer(
                 customer_id=customer.id,
                 title_ar='معاملة متأخرة',
-                title_en='Overdue Transaction',
                 body_ar=f'المعاملة رقم {transaction.reference_number} متأخرة عن موعد السداد. الرجاء السداد في أقرب وقت.',
+                title_en='Overdue Transaction',
                 body_en=f'Transaction {transaction.reference_number} is overdue. Please pay as soon as possible.',
-                type='payment_reminder',
-                reference_id=transaction.id
+                notification_type='payment_reminder',
+                related_entity_type='transaction',
+                related_entity_id=transaction.id,
+                data={
+                    'type': 'transaction_overdue',
+                    'transaction_id': str(transaction.id)
+                }
             )
-            db.session.add(notification)
-            db.session.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send overdue notification: {e}")
