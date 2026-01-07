@@ -729,3 +729,329 @@ def test_notification():
         return jsonify({'success': True, 'data': result})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e), 'error_code': 'PUSH_001'})
+
+
+# ==================== Mobile Payment Flow ====================
+
+@customers_bp.route('/me/pay-transaction', methods=['POST'])
+@limiter.limit("10 per minute", key_func=get_customer_id)
+@jwt_required()
+def pay_transaction_mobile():
+    """
+    Mobile-friendly endpoint to pay for a transaction.
+
+    Request body:
+    {
+        "transaction_id": "uuid-string",
+        "amount": 100.00  // Optional - defaults to remaining amount
+    }
+
+    Response:
+    {
+        "success": true,
+        "data": {
+            "payment_id": "uuid-string",
+            "payment_url": "https://...",
+            "tran_ref": "TST...",
+            "amount": 100.00,
+            "currency": "SAR",
+            "transaction": {
+                "id": "uuid",
+                "reference_number": "TXN...",
+                "merchant_name": "Store Name",
+                "total_amount": 100.00,
+                "remaining_amount": 100.00
+            },
+            "return_url": "https://.../payment/complete",
+            "expires_in_minutes": 30
+        }
+    }
+    """
+    from app.services.paytabs_service import PayTabsService
+    from app.models.transaction import Transaction
+    from app.models.merchant import Merchant
+
+    identity = current_user
+    data = request.get_json()
+
+    if not data:
+        return jsonify({
+            'success': False,
+            'message': 'Request body is required',
+            'error_code': 'VAL_001'
+        }), 400
+
+    transaction_id = data.get('transaction_id')
+    if not transaction_id:
+        return jsonify({
+            'success': False,
+            'message': 'transaction_id is required',
+            'error_code': 'VAL_001'
+        }), 400
+
+    # Get the transaction
+    transaction = Transaction.query.filter_by(
+        id=transaction_id,
+        customer_id=identity['id']
+    ).first()
+
+    if not transaction:
+        return jsonify({
+            'success': False,
+            'message': 'Transaction not found',
+            'error_code': 'TXN_001'
+        }), 404
+
+    # Check transaction status
+    if transaction.status not in ['confirmed', 'overdue']:
+        return jsonify({
+            'success': False,
+            'message': f'Cannot pay transaction with status: {transaction.status}',
+            'error_code': 'TXN_002'
+        }), 400
+
+    # Get amount (default to remaining amount)
+    amount = data.get('amount')
+    if amount:
+        amount = float(amount)
+        if amount <= 0:
+            return jsonify({
+                'success': False,
+                'message': 'Amount must be greater than 0',
+                'error_code': 'VAL_001'
+            }), 400
+        if amount > transaction.remaining_amount:
+            return jsonify({
+                'success': False,
+                'message': f'Amount exceeds remaining balance: {transaction.remaining_amount}',
+                'error_code': 'PAY_008'
+            }), 400
+    else:
+        amount = float(transaction.remaining_amount)
+
+    # Get merchant info
+    merchant = Merchant.query.get(transaction.merchant_id)
+    merchant_name = merchant.name_ar if merchant else 'Unknown'
+
+    # Create payment page
+    result = PayTabsService.create_payment_page(
+        customer_id=identity['id'],
+        transaction_ids=[transaction_id],
+        amount=amount,
+        payment_methods='all',
+        description=f'دفع معاملة {transaction.reference_number}'
+    )
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    # Enhance response with transaction details
+    result['data']['transaction'] = {
+        'id': transaction.id,
+        'reference_number': transaction.reference_number,
+        'merchant_name': merchant_name,
+        'total_amount': float(transaction.total_amount),
+        'remaining_amount': float(transaction.remaining_amount),
+        'status': transaction.status
+    }
+
+    return jsonify(result), 201
+
+
+@customers_bp.route('/me/pay-all-due', methods=['POST'])
+@limiter.limit("10 per minute", key_func=get_customer_id)
+@jwt_required()
+def pay_all_due_mobile():
+    """
+    Pay all due/overdue transactions at once.
+
+    Request body:
+    {
+        "amount": 500.00  // Optional - defaults to total due
+    }
+
+    Response includes payment URL and list of transactions being paid.
+    """
+    from app.services.paytabs_service import PayTabsService
+    from app.models.transaction import Transaction
+
+    identity = current_user
+    data = request.get_json() or {}
+
+    # Get all due/overdue transactions
+    transactions = Transaction.query.filter(
+        Transaction.customer_id == identity['id'],
+        Transaction.status.in_(['confirmed', 'overdue'])
+    ).order_by(Transaction.due_date.asc()).all()
+
+    if not transactions:
+        return jsonify({
+            'success': False,
+            'message': 'No due transactions found',
+            'error_code': 'TXN_003'
+        }), 404
+
+    # Calculate total due
+    total_due = sum(float(t.remaining_amount) for t in transactions)
+
+    # Get amount (default to total due)
+    amount = data.get('amount')
+    if amount:
+        amount = float(amount)
+        if amount <= 0:
+            return jsonify({
+                'success': False,
+                'message': 'Amount must be greater than 0',
+                'error_code': 'VAL_001'
+            }), 400
+        if amount > total_due:
+            amount = total_due  # Cap at total due
+    else:
+        amount = total_due
+
+    # Create payment page for all transactions
+    transaction_ids = [t.id for t in transactions]
+
+    result = PayTabsService.create_payment_page(
+        customer_id=identity['id'],
+        transaction_ids=transaction_ids,
+        amount=amount,
+        payment_methods='all',
+        description='دفع جميع المستحقات'
+    )
+
+    if not result['success']:
+        return jsonify(result), 400
+
+    # Add transactions summary
+    result['data']['transactions'] = [{
+        'id': t.id,
+        'reference_number': t.reference_number,
+        'remaining_amount': float(t.remaining_amount),
+        'due_date': t.due_date.isoformat() if t.due_date else None,
+        'status': t.status
+    } for t in transactions]
+    result['data']['total_due'] = total_due
+    result['data']['paying_amount'] = amount
+
+    return jsonify(result), 201
+
+
+@customers_bp.route('/me/payments/<payment_id>/check', methods=['GET'])
+@jwt_required()
+def check_payment_status_mobile(payment_id):
+    """
+    Check payment status - use this after returning from payment page.
+    If payment is completed, returns success with updated credit info.
+
+    Response:
+    {
+        "success": true,
+        "data": {
+            "payment_id": "uuid",
+            "status": "completed",  // pending, completed, failed
+            "amount": 100.00,
+            "completed_at": "2024-01-01T12:00:00",
+            "credit": {
+                "available": 2500.00,
+                "used": 0.00,
+                "limit": 2500.00
+            },
+            "message_ar": "تم الدفع بنجاح",
+            "message_en": "Payment completed successfully"
+        }
+    }
+    """
+    from app.services.paytabs_service import PayTabsService
+    from app.models.payment import Payment
+    from app.models.customer import Customer
+
+    identity = current_user
+
+    # Find the payment
+    payment = Payment.query.filter_by(
+        id=payment_id,
+        customer_id=identity['id']
+    ).first()
+
+    if not payment:
+        return jsonify({
+            'success': False,
+            'message': 'Payment not found',
+            'error_code': 'PAY_006'
+        }), 404
+
+    # Get customer for credit info
+    customer = Customer.query.get(identity['id'])
+
+    # If payment is still pending and has gateway reference, try to verify
+    if payment.status == 'pending' and payment.gateway_reference:
+        # Query PayTabs for actual status
+        query_result = PayTabsService.query_payment_status(payment.gateway_reference)
+
+        if query_result['success']:
+            gateway_status = query_result['data'].get('gateway_status', '')
+
+            if gateway_status == 'A':  # Authorized
+                # Process the payment
+                import json
+                gateway_response = json.loads(payment.gateway_response) if payment.gateway_response else {}
+
+                webhook_payload = {
+                    'tran_ref': payment.gateway_reference,
+                    'cart_amount': float(payment.amount),
+                    'cart_currency': 'SAR',
+                    'payment_result': {
+                        'response_status': 'A',
+                        'response_code': '000',
+                        'response_message': 'Authorised'
+                    },
+                    'payment_info': {
+                        'payment_method': query_result['data'].get('payment_method', 'card')
+                    },
+                    'user_defined': {
+                        'udf1': identity['id'],
+                        'udf2': ','.join([str(tid) for tid in gateway_response.get('transaction_ids', [payment.transaction_id])]),
+                        'udf3': str(payment.amount)
+                    }
+                }
+
+                PayTabsService.handle_webhook(webhook_payload, verify_amount=False)
+
+                # Refresh payment and customer from DB
+                from app.extensions import db
+                db.session.refresh(payment)
+                db.session.refresh(customer)
+
+            elif gateway_status in ['D', 'E']:  # Declined or Error
+                payment.status = 'failed'
+                from app.extensions import db
+                db.session.commit()
+
+    # Build response based on status
+    status_messages = {
+        'completed': {'ar': 'تم الدفع بنجاح', 'en': 'Payment completed successfully'},
+        'pending': {'ar': 'الدفع قيد المعالجة', 'en': 'Payment is being processed'},
+        'failed': {'ar': 'فشل الدفع', 'en': 'Payment failed'},
+        'declined': {'ar': 'تم رفض الدفع', 'en': 'Payment declined'}
+    }
+
+    messages = status_messages.get(payment.status, status_messages['pending'])
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'payment_id': payment.id,
+            'status': payment.status,
+            'amount': float(payment.amount),
+            'created_at': payment.created_at.isoformat() if payment.created_at else None,
+            'completed_at': payment.completed_at.isoformat() if payment.completed_at else None,
+            'credit': {
+                'available': float(customer.available_credit) if customer else 0,
+                'used': float(customer.used_credit) if customer else 0,
+                'limit': float(customer.credit_limit) if customer else 0
+            },
+            'message_ar': messages['ar'],
+            'message_en': messages['en']
+        }
+    })
