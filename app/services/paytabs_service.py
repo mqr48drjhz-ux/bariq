@@ -179,10 +179,11 @@ class PayTabsService:
             }
         }
 
-        # Add payment methods - show card and Apple Pay options
+        # Add payment methods
+        # Note: Apple Pay requires certificate setup in PayTabs dashboard
+        # Once Apple Pay is configured, add 'applepay' to the list
         if payment_methods == 'all':
-            # Show credit card and Apple Pay options
-            payload['payment_methods'] = ['creditcard', 'applepay']
+            payload['payment_methods'] = ['creditcard']  # Add 'applepay' when ready
         elif payment_methods:
             # PayTabs expects payment methods as list
             payload['payment_methods'] = payment_methods.split(',') if isinstance(payment_methods, str) else payment_methods
