@@ -179,9 +179,12 @@ class PayTabsService:
             }
         }
 
-        # Add payment methods filter if not 'all'
-        if payment_methods and payment_methods != 'all':
-            # PayTabs expects payment methods as string like "creditcard,mada"
+        # Add payment methods - show card and Apple Pay options
+        if payment_methods == 'all':
+            # Show credit card and Apple Pay options
+            payload['payment_methods'] = ['creditcard', 'applepay']
+        elif payment_methods:
+            # PayTabs expects payment methods as list
             payload['payment_methods'] = payment_methods.split(',') if isinstance(payment_methods, str) else payment_methods
 
         try:
@@ -681,8 +684,8 @@ class PayTabsService:
                         'code': 'all',
                         'name_ar': 'جميع الطرق',
                         'name_en': 'All Methods',
-                        'description_ar': 'عرض جميع طرق الدفع المتاحة',
-                        'description_en': 'Show all available payment methods'
+                        'description_ar': 'بطاقة ائتمان أو Apple Pay',
+                        'description_en': 'Credit Card or Apple Pay'
                     },
                     {
                         'code': 'creditcard',
@@ -690,20 +693,6 @@ class PayTabsService:
                         'name_en': 'Credit Card',
                         'description_ar': 'فيزا أو ماستركارد',
                         'description_en': 'Visa or Mastercard'
-                    },
-                    {
-                        'code': 'mada',
-                        'name_ar': 'مدى',
-                        'name_en': 'mada',
-                        'description_ar': 'بطاقة مدى السعودية',
-                        'description_en': 'Saudi mada debit card'
-                    },
-                    {
-                        'code': 'stcpay',
-                        'name_ar': 'STC Pay',
-                        'name_en': 'STC Pay',
-                        'description_ar': 'محفظة STC Pay',
-                        'description_en': 'STC Pay wallet'
                     },
                     {
                         'code': 'applepay',
