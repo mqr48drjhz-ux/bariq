@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+
+{% block title %}سياسة الخصوصية - بريق اليسر{% endblock %}
+
+{% block extra_css %}
+<style>
+  .privacy-hero {
+    background: linear-gradient(135deg, var(--teal-600) 0%, var(--teal-800) 100%);
+    padding: var(--space-12) 0;
+    text-align: center;
+    color: white;
+  }
+
+  .privacy-hero h1 {
+    color: white;
+    font-size: 2.5rem;
+    margin-bottom: var(--space-4);
+  }
+
+  .privacy-hero p {
+    color: var(--teal-100);
+    font-size: 1.125rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .privacy-content {
+    padding: var(--space-12) 0;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .privacy-section {
+    background: white;
+    border-radius: var(--radius-2xl);
+    padding: var(--space-8);
+    margin-bottom: var(--space-6);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--gray-200);
+  }
+
+  .privacy-section h2 {
+    color: var(--teal-700);
+    font-size: 1.5rem;
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 2px solid var(--teal-100);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .privacy-section h2 .icon {
+    width: 40px;
+    height: 40px;
+    background: var(--teal-100);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+  }
+
+  .privacy-section p {
+    color: var(--gray-600);
+    line-height: 1.8;
+    margin-bottom: var(--space-4);
+  }
+
+  .privacy-section ul {
+    list-style: none;
+    padding: 0;
+    margin: var(--space-4) 0;
+  }
+
+  .privacy-section ul li {
+    position: relative;
+    padding-right: var(--space-6);
+    margin-bottom: var(--space-3);
+    color: var(--gray-600);
+    line-height: 1.7;
+  }
+
+  .privacy-section ul li::before {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 10px;
+    width: 8px;
+    height: 8px;
+    background: var(--teal-500);
+    border-radius: 50%;
+  }
+
+  .last-updated {
+    text-align: center;
+    color: var(--gray-500);
+    font-size: 0.875rem;
+    padding: var(--space-6) 0;
+    border-top: 1px solid var(--gray-200);
+    margin-top: var(--space-8);
+  }
+
+  .contact-box {
+    background: var(--teal-50);
+    border: 1px solid var(--teal-200);
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    margin-top: var(--space-6);
+  }
+
+  .contact-box h3 {
+    color: var(--teal-700);
+    font-size: 1.125rem;
+    margin-bottom: var(--space-3);
+  }
+
+  .contact-box p {
+    margin-bottom: var(--space-2);
+  }
+
+  .contact-box a {
+    color: var(--teal-600);
+    font-weight: 500;
+  }
+
+  .contact-box a:hover {
+    color: var(--teal-700);
+    text-decoration: underline;
+  }
+
+  @media (max-width: 768px) {
+    .privacy-hero h1 {
+      font-size: 2rem;
+    }
+
+    .privacy-section {
+      padding: var(--space-6);
+    }
+
+    .privacy-content {
+      padding: var(--space-6) var(--space-4);
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="privacy-hero">
+  <div class="container">
+    <h1>سياسة الخصوصية</h1>
+    <p>نحن في بريق اليسر نلتزم بحماية خصوصيتك وأمان بياناتك الشخصية</p>
+  </div>
+</section>
+
+<section class="privacy-content container">
+  <div class="privacy-section">
+    <h2>
+      <span class="icon">1</span>
+      مقدمة
+    </h2>
+    <p>
+      مرحباً بك في بريق اليسر. نحن نقدر ثقتك بنا ونلتزم بحماية خصوصيتك. توضح سياسة الخصوصية هذه كيفية جمع واستخدام وحماية معلوماتك الشخصية عند استخدامك لخدماتنا.
+    </p>
+    <p>
+      باستخدامك لخدماتنا، فإنك توافق على جمع واستخدام المعلومات وفقاً لهذه السياسة.
+    </p>
+  </div>
+
+  <div class="privacy-section">
+    <h2>
+      <span class="icon">2</span>
+      المعلومات التي نجمعها
+    </h2>
+    <p>نقوم بجمع أنواع مختلفة من المعلومات لتقديم خدماتنا وتحسينها:</p>
+    <ul>
+      <li><strong>المعلومات الشخصية:</strong> الاسم الكامل، رقم الهوية الوطنية، رقم الهاتف، البريد الإلكتروني، العنوان</li>
+      <li><strong>المعلومات المالية:</strong> معلومات الحساب البنكي، سجل المعاملات، الحد الائتماني</li>
+      <li><strong>معلومات الجهاز:</strong> نوع الجهاز، نظام التشغيل، معرف الجهاز الفريد</li>
+      <li><strong>معلومات الاستخدام:</strong> كيفية تفاعلك مع خدماتنا، الصفحات التي تزورها، الوقت المستغرق</li>
+      <li><strong>معلومات الموقع:</strong> موقعك الجغرافي (بموافقتك) لتحسين تجربتك</li>
+    </ul>
+  </div>
+
+  <div class="privacy-section">
+    <h2>
+      <span class="icon">3</span>
+      كيف نستخدم معلوماتك
+    </h2>
+    <p>نستخدم المعلومات التي نجمعها للأغراض التالية:</p>
+    <ul>
+      <li>تقديم وتشغيل خدمات الشراء بالآجل</li>
+      <li>التحقق من هويتك وإجراء فحوصات الائتمان اللازمة</li>
+      <li>معالجة المعاملات والمدفوعات</li>
+      <li>إرسال إشعارات مهمة حول حسابك ومعاملاتك</li>
+      <li>تحسين خدماتنا وتطوير ميزات جديدة</li>
+      <li>الامتثال للمتطلبات القانونية والتنظيمية</li>
+      <li>الكشف عن الاحتيال ومنعه</li>
+    </ul>
+  </div>
+
+  <div class="privacy-section">
+    <h2>
+      <span class="icon">4</span>
+      مشاركة المعلومات
+    </h2>
+    <p>قد نشارك معلوماتك في الحالات التالية:</p>
+    <ul>
+      <li><strong>مقدمي الخدمات:</strong> الشركات التي تساعدنا في تشغيل خدماتنا (معالجة المدفوعات، التحليلات)</li>
+      <li><strong>الشركاء التجاريين:</strong> التجار المشاركين في برنامجنا لإتمام المعاملات</li>
+      <li><strong>السلطات القانونية:</strong> عند الطلب بموجب القانون أو لحماية حقوقنا</li>
+      <li><strong>مكاتب الائتمان:</strong> للتحقق من الجدارة الائتمانية وتحديث السجلات</li>
+    </ul>
+    <p>لن نبيع معلوماتك الشخصية لأي طرف ثالث لأغراض تسويقية دون موافقتك الصريحة.</p>
+  </div>
+
+  <div class="privacy-section">
+    <h2>
+      <span class="icon">5</span>
+      أمان البيانات
+    </h2>
+    <p>نتخذ إجراءات أمنية صارمة لحماية معلوماتك:</p>
+    <ul>
+      <li>تشفير البيانات باستخدام بروتوكولات SSL/TLS</li>
+      <li>تخزين البيانات في خوادم آمنة ومحمية</li>
+      <li>مراقبة مستمرة للأنظمة للكشف عن أي تهديدات</li>
+      <li>تدريب موظفينا على أفضل ممارسات أمن المعلومات</li>
+      <li>تقييد الوصول إلى البيانات الشخصية للموظفين المصرح لهم فقط</li>
+    </ul>
+  </div>
+
+  <div class="privacy-section">
+    <h2>
+      <span class="icon">6</span>
+      حقوقك
+    </h2>
+    <p>لديك الحقوق التالية فيما يتعلق ببياناتك الشخصية:</p>
+    <ul>
+      <li><strong>الوصول:</strong> طلب نسخة من بياناتك الشخصية المحفوظة لدينا</li>
+      <li><strong>التصحيح:</strong> تحديث أو تصحيح أي معلومات غير دقيقة</li>
+      <li><strong>الحذف:</strong> طلب حذف بياناتك (مع مراعاة المتطلبات القانونية)</li>
+      <li><strong>الاعتراض:</strong> الاعتراض على معالجة بياناتك لأغراض معينة</li>
+      <li><strong>نقل البيانات:</strong> طلب نقل بياناتك إلى مزود خدمة آخر</li>
+    </ul>
+  </div>
+
+  <div class="privacy-section">
+    <h2>
+      <span class="icon">7</span>
+      ملفات تعريف الارتباط (Cookies)
+    </h2>
+    <p>
+      نستخدم ملفات تعريف الارتباط وتقنيات مشابهة لتحسين تجربتك على موقعنا. تساعدنا هذه الملفات في:
+    </p>
+    <ul>
+      <li>تذكر تفضيلاتك وإعداداتك</li>
+      <li>الحفاظ على تسجيل دخولك</li>
+      <li>تحليل كيفية استخدام موقعنا</li>
+      <li>تخصيص المحتوى والإعلانات</li>
+    </ul>
+    <p>يمكنك التحكم في ملفات تعريف الارتباط من خلال إعدادات متصفحك.</p>
+  </div>
+
+  <div class="privacy-section">
+    <h2>
+      <span class="icon">8</span>
+      التغييرات على السياسة
+    </h2>
+    <p>
+      قد نقوم بتحديث سياسة الخصوصية هذه من وقت لآخر. سنخطرك بأي تغييرات جوهرية عبر البريد الإلكتروني أو من خلال إشعار بارز على موقعنا. ننصحك بمراجعة هذه الصفحة بشكل دوري للاطلاع على أي تحديثات.
+    </p>
+  </div>
+
+  <div class="privacy-section">
+    <h2>
+      <span class="icon">9</span>
+      اتصل بنا
+    </h2>
+    <p>
+      إذا كانت لديك أي أسئلة أو استفسارات حول سياسة الخصوصية هذه أو ممارساتنا المتعلقة بالبيانات، يرجى التواصل معنا:
+    </p>
+    <div class="contact-box">
+      <h3>معلومات الاتصال</h3>
+      <p><strong>البريد الإلكتروني:</strong> <a href="mailto:privacy@bariq.sa">privacy@bariq.sa</a></p>
+      <p><strong>الهاتف:</strong> <a href="tel:+966123456789">+966 12 345 6789</a></p>
+      <p><strong>العنوان:</strong> المملكة العربية السعودية، الرياض</p>
+    </div>
+  </div>
+
+  <div class="last-updated">
+    آخر تحديث: يناير 2026
+  </div>
+</section>
+{% endblock %}

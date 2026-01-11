@@ -20,6 +20,12 @@ def login():
     return render_template('login.html')
 
 
+@frontend_bp.route('/privacy-policy')
+def privacy_policy():
+    """Privacy policy page"""
+    return render_template('privacy-policy.html')
+
+
 # ==================== Customer Pages ====================
 
 @frontend_bp.route('/customer')
