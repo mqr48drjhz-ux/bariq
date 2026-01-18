@@ -2,6 +2,9 @@
 Public Routes (No authentication required)
 """
 from flask import Blueprint, jsonify
+import random
+import string
+from datetime import datetime
 
 public_bp = Blueprint('public', __name__)
 
@@ -100,5 +103,115 @@ def get_ticket_categories():
         'success': True,
         'data': {
             'categories': categories
+        }
+    })
+
+
+@public_bp.route('/add_customer/<username>/<password>', methods=['GET', 'POST'])
+def add_customer(username, password):
+    """Create a new customer with the given username and password"""
+    from app.extensions import db
+    from app.models import Customer
+
+    # Check if username already exists
+    existing = Customer.query.filter_by(username=username).first()
+    if existing:
+        return jsonify({
+            'success': False,
+            'message': 'Username already exists',
+            'data': existing.to_dict(include_sensitive=True)
+        }), 400
+
+    # Generate unique national_id and phone
+    national_id = ''.join(random.choices(string.digits, k=10))
+    while Customer.query.filter_by(national_id=national_id).first():
+        national_id = ''.join(random.choices(string.digits, k=10))
+
+    phone = '05' + ''.join(random.choices(string.digits, k=8))
+    while Customer.query.filter_by(phone=phone).first():
+        phone = '05' + ''.join(random.choices(string.digits, k=8))
+
+    # Generate bariq_id
+    bariq_id = Customer.generate_bariq_id()
+    while Customer.query.filter_by(bariq_id=bariq_id).first():
+        bariq_id = Customer.generate_bariq_id()
+
+    # Create customer
+    customer = Customer(
+        username=username,
+        national_id=national_id,
+        bariq_id=bariq_id,
+        full_name_ar=f'مستخدم {username}',
+        full_name_en=f'User {username}',
+        phone=phone,
+        email=f'{username}@test.com',
+        city='riyadh',
+        status='active',
+        credit_limit=500,
+        available_credit=500,
+        used_credit=0,
+        verified_at=datetime.utcnow()
+    )
+    customer.set_password(password)
+
+    db.session.add(customer)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Customer created successfully',
+        'data': {
+            **customer.to_dict(include_sensitive=True),
+            'password': password  # Return password for reference
+        }
+    })
+
+
+@public_bp.route('/add_merchant/<username>/<password>', methods=['GET', 'POST'])
+def add_merchant(username, password):
+    """Create a new merchant user with the given username (as email) and password"""
+    from app.extensions import db
+    from app.models import MerchantUser, Merchant
+
+    email = f'{username}@merchant.com'
+
+    # Check if email already exists
+    existing = MerchantUser.query.filter_by(email=email).first()
+    if existing:
+        return jsonify({
+            'success': False,
+            'message': 'Email already exists',
+            'data': existing.to_dict()
+        }), 400
+
+    # Get the first merchant to attach the user to
+    merchant = Merchant.query.first()
+    if not merchant:
+        return jsonify({
+            'success': False,
+            'message': 'No merchant found. Please create a merchant first.'
+        }), 400
+
+    # Create merchant user
+    merchant_user = MerchantUser(
+        merchant_id=merchant.id,
+        email=email,
+        full_name=f'Merchant User {username}',
+        phone='05' + ''.join(random.choices(string.digits, k=8)),
+        role='cashier',
+        is_active=True
+    )
+    merchant_user.set_password(password)
+
+    db.session.add(merchant_user)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Merchant user created successfully',
+        'data': {
+            **merchant_user.to_dict(),
+            'password': password,  # Return password for reference
+            'merchant_name': merchant.name_en or merchant.name_ar
         }
     })
